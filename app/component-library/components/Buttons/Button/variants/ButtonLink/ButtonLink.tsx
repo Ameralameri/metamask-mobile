@@ -6,20 +6,23 @@ import { GestureResponderEvent } from 'react-native';
 // External dependencies.
 import Text from '../../../../Texts/Text';
 import { useStyles } from '../../../../../hooks';
-import { ButtonSize } from '../../Button.types';
 import Button from '../../foundation/ButtonBase';
+import { ButtonSize } from '../../Button.types';
 
 // Internal dependencies.
 import { ButtonLinkProps } from './ButtonLink.types';
 import styleSheet from './ButtonLink.styles';
 import {
   DEFAULT_BUTTONLINK_SIZE,
-  DEFAULT_BUTTONLINK_TEXTVARIANT,
+  DEFAULT_BUTTONLINK_LABEL_TEXTVARIANT,
+  DEFAULT_BUTTONLINK_LABEL_COLOR,
+  DEFAULT_BUTTONLINK_LABEL_COLOR_PRESSED,
+  DEFAULT_BUTTONLINK_LABEL_COLOR_ERROR,
+  DEFAULT_BUTTONLINK_LABEL_COLOR_ERROR_PRESSED,
 } from './ButtonLink.constants';
 
 const ButtonLink: React.FC<ButtonLinkProps> = ({
   style,
-  textVariant = DEFAULT_BUTTONLINK_TEXTVARIANT,
   onPressIn,
   onPressOut,
   isDanger = false,
@@ -46,24 +49,49 @@ const ButtonLink: React.FC<ButtonLinkProps> = ({
     [setPressed, onPressOut],
   );
 
+  const getLabelColor = () =>
+    isDanger
+      ? pressed
+        ? DEFAULT_BUTTONLINK_LABEL_COLOR_ERROR_PRESSED
+        : DEFAULT_BUTTONLINK_LABEL_COLOR_ERROR
+      : pressed
+      ? DEFAULT_BUTTONLINK_LABEL_COLOR_PRESSED
+      : DEFAULT_BUTTONLINK_LABEL_COLOR;
+
+  const renderLabel = () =>
+    typeof label === 'string' ? (
+      <Text
+        variant={DEFAULT_BUTTONLINK_LABEL_TEXTVARIANT}
+        color={getLabelColor()}
+        style={pressed && styles.pressedText}
+      >
+        {label}
+      </Text>
+    ) : (
+      label
+    );
+
   return (
     <>
       {size === ButtonSize.Auto ? (
         <Text
+          style={styles.base}
           suppressHighlighting
-          style={styles.baseText}
+          onPressIn={triggerOnPressedIn}
+          onPressOut={triggerOnPressedOut}
+          accessibilityRole="link"
           {...props}
-          variant={textVariant}
         >
-          {label}
+          {renderLabel()}
         </Text>
       ) : (
         <Button
           style={styles.base}
-          labelColor={styles.baseText.color}
+          label={renderLabel()}
+          labelColor={getLabelColor()}
           onPressIn={triggerOnPressedIn}
           onPressOut={triggerOnPressedOut}
-          label={label}
+          size={size}
           {...props}
         />
       )}

@@ -11,6 +11,15 @@ import {
 import URL from 'url-parse';
 import { MetaMetricsEvents } from '../../core/Analytics';
 import AnalyticsV2 from '../../util/analyticsV2';
+import {
+  selectChainId,
+  selectNetworkConfigurations,
+} from '../../selectors/networkController';
+import { store } from '../../store';
+import { BannerAlertSeverity } from '../../component-library/components/Banners/Banner';
+import { strings } from '../../../locales/i18n';
+
+const EVM_NATIVE_TOKEN_DECIMALS = 18;
 
 const waitForInteraction = async () =>
   new Promise((resolve) => {
@@ -27,7 +36,7 @@ const wallet_addEthereumChain = async ({
   startApprovalFlow,
   endApprovalFlow,
 }) => {
-  const { PreferencesController, CurrencyRateController, NetworkController } =
+  const { CurrencyRateController, NetworkController, ApprovalController } =
     Engine.context;
 
   if (!req.params?.[0] || typeof req.params[0] !== 'object') {
@@ -42,7 +51,7 @@ const wallet_addEthereumChain = async ({
 
   const {
     chainId,
-    chainName = null,
+    chainName: rawChainName = null,
     blockExplorerUrls = null,
     nativeCurrency = null,
     rpcUrls,
@@ -115,13 +124,15 @@ const wallet_addEthereumChain = async ({
     );
   }
 
-  const frequentRpcList = PreferencesController.state.frequentRpcList;
-  const existingNetwork = frequentRpcList.find(
-    (rpc) => rpc.chainId === chainIdDecimal,
+  const networkConfigurations = selectNetworkConfigurations(store.getState());
+  const existingEntry = Object.entries(networkConfigurations).find(
+    ([, networkConfiguration]) =>
+      networkConfiguration.chainId === chainIdDecimal,
   );
 
-  if (existingNetwork) {
-    const currentChainId = NetworkController.state.providerConfig.chainId;
+  if (existingEntry) {
+    const [networkConfigurationId, networkConfiguration] = existingEntry;
+    const currentChainId = selectChainId(store.getState());
     if (currentChainId === chainIdDecimal) {
       res.result = null;
       return;
@@ -130,7 +141,7 @@ const wallet_addEthereumChain = async ({
     const analyticsParams = {
       chain_id: _chainId,
       source: 'Custom Network API',
-      symbol: existingNetwork?.ticker,
+      symbol: networkConfiguration.ticker,
       ...analytics,
     };
 
@@ -138,10 +149,10 @@ const wallet_addEthereumChain = async ({
       await requestUserApproval({
         type: 'SWITCH_ETHEREUM_CHAIN',
         requestData: {
-          rpcUrl: existingNetwork.rpcUrl,
+          rpcUrl: networkConfiguration.rpcUrl,
           chainId: _chainId,
-          chainName: existingNetwork.nickname,
-          ticker: existingNetwork.ticker,
+          chainName: networkConfiguration.nickname,
+          ticker: networkConfiguration.ticker,
           type: 'switch',
         },
       });
@@ -153,13 +164,8 @@ const wallet_addEthereumChain = async ({
       throw ethErrors.provider.userRejectedRequest();
     }
 
-    CurrencyRateController.setNativeCurrency(existingNetwork.ticker);
-    NetworkController.setRpcTarget(
-      existingNetwork.rpcUrl,
-      chainIdDecimal,
-      existingNetwork.ticker,
-      existingNetwork.nickname,
-    );
+    CurrencyRateController.setNativeCurrency(networkConfiguration.ticker);
+    NetworkController.setActiveNetwork(networkConfigurationId);
 
     AnalyticsV2.trackEvent(MetaMetricsEvents.NETWORK_SWITCHED, analyticsParams);
 
@@ -185,13 +191,13 @@ const wallet_addEthereumChain = async ({
     });
   }
 
-  if (typeof chainName !== 'string' || !chainName) {
+  if (typeof rawChainName !== 'string' || !rawChainName) {
     throw ethErrors.rpc.invalidParams({
-      message: `Expected non-empty string 'chainName'. Received:\n${chainName}`,
+      message: `Expected non-empty string 'chainName'. Received:\n${rawChainName}`,
     });
   }
-  const _chainName =
-    chainName.length > 100 ? chainName.substring(0, 100) : chainName;
+  const chainName =
+    rawChainName.length > 100 ? rawChainName.substring(0, 100) : rawChainName;
 
   if (nativeCurrency !== null) {
     if (typeof nativeCurrency !== 'object' || Array.isArray(nativeCurrency)) {
@@ -199,7 +205,7 @@ const wallet_addEthereumChain = async ({
         message: `Expected null or object 'nativeCurrency'. Received:\n${nativeCurrency}`,
       });
     }
-    if (nativeCurrency.decimals !== 18) {
+    if (nativeCurrency.decimals !== EVM_NATIVE_TOKEN_DECIMALS) {
       throw ethErrors.rpc.invalidParams({
         message: `Expected the number 18 for 'nativeCurrency.decimals' when 'nativeCurrency' is provided. Received: ${nativeCurrency.decimals}`,
       });
@@ -222,12 +228,12 @@ const wallet_addEthereumChain = async ({
   const requestData = {
     chainId: _chainId,
     blockExplorerUrl: firstValidBlockExplorerUrl,
-    chainName: _chainName,
+    chainName,
     rpcUrl: firstValidRPCUrl,
     ticker,
   };
 
-  let alert = null;
+  const alerts = [];
   const safeChainsListRequest = await fetch(
     'https://chainid.network/chains.json',
   );
@@ -235,29 +241,50 @@ const wallet_addEthereumChain = async ({
   const matchedChain = safeChainsList.find(
     (chain) => chain.chainId.toString() === chainIdDecimal,
   );
-  let validated = !!matchedChain;
 
   if (matchedChain) {
-    if (
-      matchedChain.nativeCurrency?.decimals !== 18 ||
-      matchedChain.name.toLowerCase() !== requestData.chainName.toLowerCase() ||
-      matchedChain.nativeCurrency?.symbol !== requestData.ticker
-    ) {
-      validated = false;
-    }
-
     const { origin } = new URL(requestData.rpcUrl);
-    if (!matchedChain.rpc.map((rpc) => new URL(rpc).origin).includes(origin)) {
-      validated = false;
+    if (!matchedChain.rpc?.map((rpc) => new URL(rpc).origin).includes(origin)) {
+      alerts.push({
+        alertError: strings('add_custom_network.invalid_rpc_url'),
+        alertSeverity: BannerAlertSeverity.Error,
+        alertOrigin: 'rpc_url',
+      });
+    }
+    if (matchedChain.nativeCurrency?.decimals !== EVM_NATIVE_TOKEN_DECIMALS) {
+      alerts.push({
+        alertError: strings('add_custom_network.invalid_chain_token_decimals'),
+        alertSeverity: BannerAlertSeverity.Warning,
+        alertOrigin: 'decimals',
+      });
+    }
+    if (
+      matchedChain.name?.toLowerCase() !== requestData.chainName.toLowerCase()
+    ) {
+      alerts.push({
+        alertError: strings('add_custom_network.unrecognized_chain_name'),
+        alertSeverity: BannerAlertSeverity.Warning,
+        alertOrigin: 'chain_name',
+      });
+    }
+    if (matchedChain.nativeCurrency?.symbol !== requestData.ticker) {
+      alerts.push({
+        alertError: strings('add_custom_network.unrecognized_chain_ticker'),
+        alertSeverity: BannerAlertSeverity.Warning,
+        alertOrigin: 'chain_ticker',
+      });
     }
   }
 
   if (!matchedChain) {
-    alert = 'UNRECOGNIZED_CHAIN';
-  } else if (!validated) {
-    alert = 'INVALID_CHAIN';
+    alerts.push({
+      alertError: strings('add_custom_network.unrecognized_chain_id'),
+      alertSeverity: BannerAlertSeverity.Error,
+      alertOrigin: 'unknown_chain',
+    });
   }
-  requestData.alert = alert;
+
+  requestData.alerts = alerts;
 
   const analyticsParamsAdd = {
     chain_id: chainIdDecimal,
@@ -270,6 +297,13 @@ const wallet_addEthereumChain = async ({
     MetaMetricsEvents.NETWORK_REQUESTED,
     analyticsParamsAdd,
   );
+
+  // Remove all existing approvals, including other add network requests.
+  ApprovalController.clear(ethErrors.provider.userRejectedRequest());
+
+  // If existing approval request was an add network request, wait for
+  // it to be rejected and for the corresponding approval flow to be ended.
+  await waitForInteraction();
 
   const { id: approvalFlowId } = startApprovalFlow();
 
@@ -287,15 +321,24 @@ const wallet_addEthereumChain = async ({
       throw ethErrors.provider.userRejectedRequest();
     }
 
-    PreferencesController.addToFrequentRpcList(
-      firstValidRPCUrl,
-      chainIdDecimal,
-      ticker,
-      _chainName,
-      {
-        blockExplorerUrl: firstValidBlockExplorerUrl,
-      },
-    );
+    const networkConfigurationId =
+      await NetworkController.upsertNetworkConfiguration(
+        {
+          rpcUrl: firstValidRPCUrl,
+          chainId: chainIdDecimal,
+          ticker,
+          nickname: chainName,
+          rpcPrefs: {
+            blockExplorerUrl: firstValidBlockExplorerUrl,
+          },
+        },
+        {
+          // Metrics-related properties required, but the metric event is a no-op
+          // TODO: Use events for controller metric events
+          referrer: 'ignored',
+          source: 'ignored',
+        },
+      );
 
     AnalyticsV2.trackEvent(MetaMetricsEvents.NETWORK_ADDED, analyticsParamsAdd);
 
@@ -307,12 +350,7 @@ const wallet_addEthereumChain = async ({
     });
 
     CurrencyRateController.setNativeCurrency(ticker);
-    NetworkController.setRpcTarget(
-      firstValidRPCUrl,
-      chainIdDecimal,
-      ticker,
-      _chainName,
-    );
+    NetworkController.setActiveNetwork(networkConfigurationId);
   } finally {
     endApprovalFlow({ id: approvalFlowId });
   }

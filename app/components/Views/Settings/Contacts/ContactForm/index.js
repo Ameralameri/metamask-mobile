@@ -31,20 +31,9 @@ import {
 } from '../../../../../constants/error';
 import Routes from '../../../../../constants/navigation/Routes';
 import { createQRScannerNavDetails } from '../../../QRScanner';
-import generateTestId from '../../../../../../wdio/utils/generateTestId';
-import {
-  selectChainId,
-  selectNetwork,
-} from '../../../../../selectors/networkController';
+import { selectChainId } from '../../../../../selectors/networkController';
 import { selectIdentities } from '../../../../../selectors/preferencesController';
-import {
-  ADD_CONTACT_ADD_BUTTON,
-  ADD_CONTACT_ADDRESS_INPUT,
-  ADD_CONTACT_DELETE_BUTTON,
-  ADD_CONTACT_MEMO_INPUT,
-  ADD_CONTACT_NAME_INPUT,
-  ADD_CONTACTS_CONTAINER_ID,
-} from '../../../../../../wdio/screen-objects/testIDs/Screens/AddContact.testIds';
+import { AddContactViewSelectorsIDs } from '../../../../../../e2e/selectors/Settings/Contacts/AddContactView.selectors';
 
 const createStyles = (colors) =>
   StyleSheet.create({
@@ -132,10 +121,6 @@ class ContactForm extends PureComponent {
      */
     navigation: PropTypes.object,
     /**
-     * Network id
-     */
-    network: PropTypes.string,
-    /**
      * An object containing each identity in the format address => account
      */
     identities: PropTypes.object,
@@ -193,8 +178,8 @@ class ContactForm extends PureComponent {
         this.setState({ inputWidth: '100%' });
       }, 100);
     if (mode === EDIT) {
-      const { addressBook, network, identities } = this.props;
-      const networkAddressBook = addressBook[network] || {};
+      const { addressBook, chainId, identities } = this.props;
+      const networkAddressBook = addressBook[chainId] || {};
       const address = this.props.route.params?.address ?? '';
       const contact = networkAddressBook[address] || identities[address];
       this.setState({
@@ -231,7 +216,7 @@ class ContactForm extends PureComponent {
   };
 
   validateAddressOrENSFromInput = async (address) => {
-    const { network, addressBook, identities, chainId } = this.props;
+    const { addressBook, identities, chainId } = this.props;
 
     const {
       addressError,
@@ -241,7 +226,6 @@ class ContactForm extends PureComponent {
       errorContinue,
     } = await validateAddressOrENS({
       toAccount: address,
-      network,
       addressBook,
       identities,
       chainId,
@@ -277,13 +261,13 @@ class ContactForm extends PureComponent {
 
   saveContact = () => {
     const { name, address, memo, toEnsAddress } = this.state;
-    const { network, navigation } = this.props;
+    const { chainId, navigation } = this.props;
     const { AddressBookController } = Engine.context;
     if (!name || !address) return;
     AddressBookController.set(
       toChecksumAddress(toEnsAddress || address),
       name,
-      network,
+      chainId,
       memo,
     );
     navigation.pop();
@@ -291,8 +275,8 @@ class ContactForm extends PureComponent {
 
   deleteContact = () => {
     const { AddressBookController } = Engine.context;
-    const { network, navigation, route } = this.props;
-    AddressBookController.delete(network, this.contactAddressToRemove);
+    const { chainId, navigation, route } = this.props;
+    AddressBookController.delete(chainId, this.contactAddressToRemove);
     route.params.onDelete();
     navigation.pop();
   };
@@ -356,7 +340,7 @@ class ContactForm extends PureComponent {
     return (
       <SafeAreaView
         style={styles.wrapper}
-        {...generateTestId(Platform, ADD_CONTACTS_CONTAINER_ID)}
+        testID={AddContactViewSelectorsIDs.CONTAINER}
       >
         <KeyboardAwareScrollView style={styles.informationWrapper}>
           <View style={styles.scrollWrapper}>
@@ -377,7 +361,7 @@ class ContactForm extends PureComponent {
               ]}
               value={name}
               onSubmitEditing={this.jumpToAddressInput}
-              {...generateTestId(Platform, ADD_CONTACT_NAME_INPUT)}
+              testID={AddContactViewSelectorsIDs.NAME_INPUT}
               keyboardAppearance={themeAppearance}
             />
 
@@ -402,7 +386,7 @@ class ContactForm extends PureComponent {
                   value={toEnsName || address}
                   ref={this.addressInput}
                   onSubmitEditing={this.jumpToMemoInput}
-                  {...generateTestId(Platform, ADD_CONTACT_ADDRESS_INPUT)}
+                  testID={AddContactViewSelectorsIDs.ADDRESS_INPUT}
                   keyboardAppearance={themeAppearance}
                 />
                 {toEnsName && toEnsAddress && (
@@ -448,7 +432,7 @@ class ContactForm extends PureComponent {
                   ]}
                   value={memo}
                   ref={this.memoInput}
-                  {...generateTestId(Platform, ADD_CONTACT_MEMO_INPUT)}
+                  testID={AddContactViewSelectorsIDs.MEMO_INPUT}
                   keyboardAppearance={themeAppearance}
                 />
               </View>
@@ -471,7 +455,7 @@ class ContactForm extends PureComponent {
                     type={'confirm'}
                     disabled={!addressReady || !name || !!addressError}
                     onPress={this.saveContact}
-                    testID={ADD_CONTACT_ADD_BUTTON}
+                    testID={AddContactViewSelectorsIDs.ADD_BUTTON}
                   >
                     {strings(`address_book.${mode}_contact`)}
                   </StyledButton>
@@ -483,7 +467,7 @@ class ContactForm extends PureComponent {
                       type={'warning-empty'}
                       disabled={!addressReady || !name || !!addressError}
                       onPress={this.onDelete}
-                      testID={ADD_CONTACT_DELETE_BUTTON}
+                      testID={AddContactViewSelectorsIDs.DELETE_BUTTON}
                     >
                       {strings(`address_book.delete`)}
                     </StyledButton>
@@ -516,7 +500,6 @@ ContactForm.contextType = ThemeContext;
 const mapStateToProps = (state) => ({
   addressBook: state.engine.backgroundState.AddressBookController.addressBook,
   identities: selectIdentities(state),
-  network: selectNetwork(state),
   chainId: selectChainId(state),
 });
 

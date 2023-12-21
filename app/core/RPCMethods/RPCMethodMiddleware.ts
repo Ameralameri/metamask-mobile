@@ -19,6 +19,7 @@ import Networks, {
   blockTagParamIndex,
   getAllNetworks,
 } from '../../util/networks';
+import { isBlockaidFeatureEnabled } from '../../util/blockaid';
 import { polyfillGasPrice } from './utils';
 import ImportedEngine from '../Engine';
 import { strings } from '../../../locales/i18n';
@@ -28,9 +29,18 @@ import { removeBookmark } from '../../actions/bookmarks';
 import setOnboardingWizardStep from '../../actions/wizard';
 import { v1 as random } from 'uuid';
 import { getPermittedAccounts } from '../Permissions';
-import AppConstants from '../AppConstants.js';
-import { isSmartContractAddress } from '../../util/transactions';
-import { TOKEN_NOT_SUPPORTED_FOR_NETWORK } from '../../constants/error';
+import AppConstants from '../AppConstants';
+import PPOMUtil from '../../lib/ppom/ppom-util';
+import {
+  selectProviderConfig,
+  selectProviderType,
+} from '../../selectors/networkController';
+import { setEventStageError, setEventStage } from '../../actions/rpcEvents';
+import { isWhitelistedRPC, RPCStageTypes } from '../../reducers/rpcEvents';
+import { regex } from '../../../app/util/regex';
+import Logger from '../../../app/util/Logger';
+import DevLogger from '../SDKConnect/utils/DevLogger';
+
 const Engine = ImportedEngine as any;
 
 let appVersion = '';
@@ -49,9 +59,13 @@ export enum ApprovalTypes {
   TRANSACTION = 'transaction',
   RESULT_ERROR = 'result_error',
   RESULT_SUCCESS = 'result_success',
+  ///: BEGIN:ONLY_INCLUDE_IF(snaps)
+  INSTALL_SNAP = 'wallet_installSnap',
+  UPDATE_SNAP = 'wallet_updateSnap',
+  ///: END:ONLY_INCLUDE_IF
 }
 
-interface RPCMethodsMiddleParameters {
+export interface RPCMethodsMiddleParameters {
   hostname: string;
   getProviderState: () => any;
   navigation: any;
@@ -111,7 +125,7 @@ export const checkActiveAccountAndChainId = async ({
   }
 
   if (chainId) {
-    const { providerConfig } = Engine.context.NetworkController.state;
+    const providerConfig = selectProviderConfig(store.getState());
     const networkType = providerConfig.type as NetworkType;
     const isInitialNetwork =
       networkType && getAllNetworks().includes(networkType);
@@ -187,6 +201,7 @@ const generateRawSignature = async ({
       from: req.params[0],
       ...pageMeta,
       origin: hostname,
+      securityAlertResponse: req.securityAlertResponse,
     },
     req,
     version,
@@ -234,7 +249,8 @@ export const getRpcMethodMiddleware = ({
     const getAccounts = (): string[] => {
       const selectedAddress =
         Engine.context.PreferencesController.state.selectedAddress?.toLowerCase();
-      const isEnabled = isWalletConnect || getApprovedHosts()[hostname];
+      const approvedHosts = getApprovedHosts(hostname) || {};
+      const isEnabled = isWalletConnect || approvedHosts[hostname];
       return isEnabled && selectedAddress ? [selectedAddress] : [];
     };
 
@@ -311,7 +327,7 @@ export const getRpcMethodMiddleware = ({
     const rpcMethods: any = {
       wallet_getPermissions: async () =>
         new Promise<any>((resolve) => {
-          getPermissionsHandler.implementation(
+          const handle = getPermissionsHandler.implementation(
             req,
             res,
             next,
@@ -326,6 +342,9 @@ export const getRpcMethodMiddleware = ({
                 ),
             },
           );
+          handle?.catch((error) => {
+            Logger.error('Failed to get permissions', error);
+          });
         }),
       wallet_requestPermissions: async () =>
         new Promise<any>((resolve, reject) => {
@@ -367,7 +386,7 @@ export const getRpcMethodMiddleware = ({
         );
       },
       eth_chainId: async () => {
-        const { providerConfig } = Engine.context.NetworkController.state;
+        const providerConfig = selectProviderConfig(store.getState());
         const networkType = providerConfig.type as NetworkType;
         const isInitialNetwork =
           networkType && getAllNetworks().includes(networkType);
@@ -394,9 +413,7 @@ export const getRpcMethodMiddleware = ({
         res.result = true;
       },
       net_version: async () => {
-        const {
-          providerConfig: { type: networkType },
-        } = Engine.context.NetworkController.state;
+        const networkType = selectProviderType(store.getState());
 
         const isInitialNetwork =
           networkType && getAllNetworks().includes(networkType);
@@ -464,6 +481,17 @@ export const getRpcMethodMiddleware = ({
       eth_sendTransaction: async () => {
         checkTabActive();
         const { TransactionController } = Engine.context;
+
+        if (isMMSDK) {
+          // Append origin to the request so it can be parsed in UI TransactionHeader
+          DevLogger.log(
+            `SDK Transaction detected --- custom hostname -- ${hostname} --> ${
+              AppConstants.MM_SDK.SDK_REMOTE_ORIGIN + url.current
+            }`,
+          );
+          hostname = AppConstants.MM_SDK.SDK_REMOTE_ORIGIN + url.current;
+        }
+
         return RPCMethods.eth_sendTransaction({
           hostname,
           req,
@@ -522,6 +550,9 @@ export const getRpcMethodMiddleware = ({
             address: req.params[0].from,
             checkSelectedAddress: isMMSDK || isWalletConnect,
           });
+          if (isBlockaidFeatureEnabled()) {
+            PPOMUtil.validateRequest(req);
+          }
           const rawSig = await SignatureController.newUnsignedMessage({
             data: req.params[1],
             from: req.params[0],
@@ -569,6 +600,10 @@ export const getRpcMethodMiddleware = ({
           checkSelectedAddress: isMMSDK || isWalletConnect,
         });
 
+        if (isBlockaidFeatureEnabled()) {
+          PPOMUtil.validateRequest(req);
+        }
+
         const rawSig = await SignatureController.newUnsignedPersonalMessage({
           ...params,
           ...pageMeta,
@@ -614,6 +649,10 @@ export const getRpcMethodMiddleware = ({
           checkSelectedAddress: isMMSDK || isWalletConnect,
         });
 
+        if (isBlockaidFeatureEnabled()) {
+          PPOMUtil.validateRequest(req);
+        }
+
         const rawSig = await SignatureController.newUnsignedTypedMessage(
           {
             data: req.params[0],
@@ -634,6 +673,9 @@ export const getRpcMethodMiddleware = ({
             ? JSON.parse(req.params[1])
             : req.params[1];
         const chainId = data.domain.chainId;
+        if (isBlockaidFeatureEnabled()) {
+          PPOMUtil.validateRequest(req);
+        }
         res.result = await generateRawSignature({
           version: 'V3',
           req,
@@ -653,6 +695,9 @@ export const getRpcMethodMiddleware = ({
       eth_signTypedData_v4: async () => {
         const data = JSON.parse(req.params[1]);
         const chainId = data.domain.chainId;
+        if (isBlockaidFeatureEnabled()) {
+          PPOMUtil.validateRequest(req);
+        }
         res.result = await generateRawSignature({
           version: 'V4',
           req,
@@ -681,13 +726,9 @@ export const getRpcMethodMiddleware = ({
           checkTabActive();
           navigation.navigate('QRScanner', {
             onScanSuccess: (data: any) => {
-              const regex = new RegExp(req.params[0]);
-              if (regex && !regex.exec(data)) {
+              if (!regex.exec(req.params[0], data)) {
                 reject({ message: 'NO_REGEX_MATCH', data });
-              } else if (
-                !regex &&
-                !/^(0x){1}[0-9a-fA-F]{40}$/i.exec(data.target_address)
-              ) {
+              } else if (regex.walletAddress.exec(data.target_address)) {
                 reject({
                   message: 'INVALID_ETHEREUM_ADDRESS',
                   data: data.target_address,
@@ -708,36 +749,8 @@ export const getRpcMethodMiddleware = ({
           });
         }),
 
-      wallet_watchAsset: async () => {
-        const {
-          params: {
-            options: { address, decimals, image, symbol },
-            type,
-          },
-        } = req;
-        const { TokensController, NetworkController } = Engine.context;
-        const { chainId } = NetworkController.state?.providerConfig || {};
-
-        checkTabActive();
-
-        // Check if token exists on wallet's active network.
-        const isTokenOnNetwork = await isSmartContractAddress(address, chainId);
-        if (!isTokenOnNetwork) {
-          throw new Error(TOKEN_NOT_SUPPORTED_FOR_NETWORK);
-        }
-        const permittedAccounts = await getPermittedAccounts(hostname);
-        // This should return the current active account on the Dapp.
-        const selectedAddress =
-          Engine.context.PreferencesController.state.selectedAddress;
-        // Fallback to wallet address if there is no connected account to Dapp.
-        const interactingAddress = permittedAccounts?.[0] || selectedAddress;
-        await TokensController.watchAsset(
-          { address, symbol, decimals, image },
-          type,
-          safeToChecksumAddress(interactingAddress),
-        );
-        res.result = true;
-      },
+      wallet_watchAsset: async () =>
+        RPCMethods.wallet_watchAsset({ req, res, hostname, checkTabActive }),
 
       metamask_removeFavorite: async () => {
         checkTabActive();
@@ -881,7 +894,19 @@ export const getRpcMethodMiddleware = ({
     if (!rpcMethods[req.method]) {
       return next();
     }
-    await rpcMethods[req.method]();
-  });
 
+    const isWhiteListedMethod = isWhitelistedRPC(req.method);
+
+    try {
+      isWhiteListedMethod &&
+        store.dispatch(setEventStage(req.method, RPCStageTypes.REQUEST_SEND));
+      await rpcMethods[req.method]();
+
+      isWhiteListedMethod &&
+        store.dispatch(setEventStage(req.method, RPCStageTypes.COMPLETE));
+    } catch (e) {
+      isWhiteListedMethod && store.dispatch(setEventStageError(req.method, e));
+      throw e;
+    }
+  });
 export default getRpcMethodMiddleware;

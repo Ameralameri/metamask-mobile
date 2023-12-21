@@ -147,11 +147,6 @@ const Wallet = ({ navigation }: any) => {
   }, [navigate, providerConfig.chainId]);
   const { colors: themeColors } = useTheme();
 
-  useEffect(() => {
-    const { TokenRatesController } = Engine.context;
-    TokenRatesController.poll();
-  }, [tokens]);
-
   /**
    * Check to see if we need to show What's New modal
    */
@@ -238,6 +233,7 @@ const Wallet = ({ navigation }: any) => {
 
       assets = [
         {
+          // TODO: Add name property to Token interface in controllers.
           name: getTicker(ticker) === 'ETH' ? 'Ethereum' : ticker,
           symbol: getTicker(ticker),
           isETH: true,
@@ -248,13 +244,12 @@ const Wallet = ({ navigation }: any) => {
             currentCurrency,
           ),
           logo: '../images/eth-logo-new.png',
-        },
+        } as any,
         ...(tokens || []),
       ];
     } else {
       assets = tokens;
     }
-
     return (
       <View style={styles.wrapper}>
         <WalletAccount style={styles.walletAccount} ref={walletRef} />
@@ -268,9 +263,15 @@ const Wallet = ({ navigation }: any) => {
             tabLabel={strings('wallet.tokens')}
             key={'tokens-tab'}
             navigation={navigation}
+            // TODO - Consolidate into the correct type.
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
             tokens={assets}
           />
           <CollectibleContracts
+            // TODO - Extend component to support injected tabLabel prop.
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
             tabLabel={strings('wallet.collectibles')}
             key={'nfts-tab'}
             navigation={navigation}
@@ -290,7 +291,6 @@ const Wallet = ({ navigation }: any) => {
     tokens,
     styles,
   ]);
-
   const renderLoader = useCallback(
     () => (
       <View style={styles.loader}>

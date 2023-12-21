@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSelector } from 'react-redux';
 import { View, Text, InteractionManager } from 'react-native';
 import Engine from '../../../core/Engine';
 import SignatureRequest from '../SignatureRequest';
@@ -9,14 +10,24 @@ import { strings } from '../../../../locales/i18n';
 import { WALLET_CONNECT_ORIGIN } from '../../../util/walletconnect';
 import { MetaMetricsEvents } from '../../../core/Analytics';
 import AnalyticsV2 from '../../../util/analyticsV2';
-import { getAddressAccountType } from '../../../util/address';
+import {
+  getAddressAccountType,
+  isExternalHardwareAccount,
+} from '../../../util/address';
 import sanitizeString from '../../../util/string';
 import { KEYSTONE_TX_CANCELED } from '../../../constants/error';
 import { useTheme } from '../../../util/theme';
 import { PersonalSignProps } from './types';
 import { useNavigation } from '@react-navigation/native';
 import createStyles from './styles';
+
 import AppConstants from '../../../core/AppConstants';
+import createExternalSignModelNav from '../../../util/hardwareWallet/signatureUtils';
+import { selectChainId } from '../../../selectors/networkController';
+import { store } from '../../../store';
+import { getBlockaidMetricsParams } from '../../../util/blockaid';
+import { SecurityAlertResponse } from '../BlockaidBanner/BlockaidBanner.types';
+import { SigningModalSelectorsIDs } from '../../../../e2e/selectors/Modals/SigningModal.selectors';
 
 /**
  * Component that supports personal_sign
@@ -31,6 +42,9 @@ const PersonalSign = ({
 }: PersonalSignProps) => {
   const navigation = useNavigation();
   const [truncateMessage, setTruncateMessage] = useState<boolean>(false);
+  const { securityAlertResponse } = useSelector(
+    (reduxState: any) => reduxState.signatureRequest,
+  );
 
   const { colors }: any = useTheme();
   const styles = createStyles(colors);
@@ -39,37 +53,39 @@ const PersonalSign = ({
     account_type?: string;
     dapp_host_name?: string;
     chain_id?: string;
-    sign_type?: string;
+    signature_type?: string;
     [key: string]: string | undefined;
   }
 
   const getAnalyticsParams = useCallback((): AnalyticsParams => {
     try {
-      const { NetworkController }: any = Engine.context;
-      const { chainId } = NetworkController?.state?.providerConfig || {};
-      const url = new URL(currentPageInformation?.url);
+      const chainId = selectChainId(store.getState());
+      const pageInfo = currentPageInformation || messageParams.meta;
+      const url = new URL(pageInfo.url);
+
+      let blockaidParams = {};
+
+      if (securityAlertResponse) {
+        blockaidParams = getBlockaidMetricsParams(
+          securityAlertResponse as SecurityAlertResponse,
+        );
+      }
 
       return {
         account_type: getAddressAccountType(messageParams.from),
         dapp_host_name: url?.host,
         chain_id: chainId,
-        sign_type: 'personal',
-        ...currentPageInformation?.analytics,
+        signature_type: 'personal_sign',
+        ...pageInfo?.analytics,
+        ...blockaidParams,
       };
     } catch (error) {
       return {};
     }
-  }, [currentPageInformation, messageParams]);
+  }, [currentPageInformation, messageParams, securityAlertResponse]);
 
   useEffect(() => {
-    AnalyticsV2.trackEvent(
-      MetaMetricsEvents.SIGN_REQUEST_STARTED,
-      getAnalyticsParams(),
-    );
-  }, [getAnalyticsParams]);
-
-  useEffect(() => {
-    const onSignatureError = ({ error }) => {
+    const onSignatureError = ({ error }: { error: Error }) => {
       if (error?.message.startsWith(KEYSTONE_TX_CANCELED)) {
         AnalyticsV2.trackEvent(
           MetaMetricsEvents.QR_HARDWARE_TRANSACTION_CANCELED,
@@ -111,18 +127,29 @@ const PersonalSign = ({
     await onReject();
     showWalletConnectNotification(false);
     AnalyticsV2.trackEvent(
-      MetaMetricsEvents.SIGN_REQUEST_CANCELLED,
+      MetaMetricsEvents.SIGNATURE_REJECTED,
       getAnalyticsParams(),
     );
   };
 
   const confirmSignature = async () => {
-    await onConfirm();
-    showWalletConnectNotification(true);
-    AnalyticsV2.trackEvent(
-      MetaMetricsEvents.SIGN_REQUEST_COMPLETED,
-      getAnalyticsParams(),
-    );
+    if (!isExternalHardwareAccount(messageParams.from)) {
+      await onConfirm();
+      showWalletConnectNotification(true);
+      AnalyticsV2.trackEvent(
+        MetaMetricsEvents.SIGNATURE_APPROVED,
+        getAnalyticsParams(),
+      );
+    } else {
+      navigation.navigate(
+        ...(await createExternalSignModelNav(
+          onReject,
+          onConfirm,
+          messageParams,
+          'personal_sign',
+        )),
+      );
+    }
   };
 
   const shouldTruncateMessage = (e: any) => {
@@ -136,7 +163,7 @@ const PersonalSign = ({
   const renderMessageText = () => {
     const textChild = sanitizeString(hexToText(messageParams.data))
       .split('\n')
-      .map((line, i) => (
+      .map((line: string, i: number) => (
         <Text
           key={`txt_${i}`}
           style={[
@@ -187,9 +214,9 @@ const PersonalSign = ({
       showExpandedMessage={showExpandedMessage}
       toggleExpandedMessage={toggleExpandedMessage}
       truncateMessage={truncateMessage}
-      type="personalSign"
+      type="personal_sign"
       fromAddress={messageParams.from}
-      testID={'personal-signature-request'}
+      testID={SigningModalSelectorsIDs.PERSONAL_REQUEST}
     >
       <View style={styles.messageWrapper}>{renderMessageText()}</View>
     </SignatureRequest>

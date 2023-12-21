@@ -13,7 +13,7 @@ import { connect } from 'react-redux';
 import PropTypes from 'prop-types';
 import { fontStyles } from '../../../styles/common';
 import Emoji from 'react-native-emoji';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '../../../store/async-storage-wrapper';
 import OnboardingProgress from '../../UI/OnboardingProgress';
 import ActionView from '../../UI/ActionView';
 import { strings } from '../../../../locales/i18n';
@@ -32,6 +32,7 @@ import { MetaMetricsEvents } from '../../../core/Analytics';
 import AnalyticsV2 from '../../../util/analyticsV2';
 import DefaultPreference from 'react-native-default-preference';
 import { ThemeContext, mockTheme } from '../../../util/theme';
+import { ManualBackUpStepsSelectorsIDs } from '../../../../e2e/selectors/Onboarding/ManualBackUpSteps.selectors';
 
 const createStyles = (colors) =>
   StyleSheet.create({
@@ -235,14 +236,14 @@ class ManualBackupStep3 extends PureComponent {
           </View>
         ) : null}
         <ActionView
-          confirmTestID={'manual-backup-step-3-done-button'}
+          confirmTestID={ManualBackUpStepsSelectorsIDs.DONE_BUTTON}
           confirmText={strings('manual_backup_step_3.done')}
           onConfirmPress={this.done}
           showCancelButton={false}
           confirmButtonMode={'confirm'}
           style={styles.actionView}
         >
-          <View style={styles.wrapper} testID={'import-congrats-screen'}>
+          <View style={styles.wrapper}>
             <Emoji name="tada" style={styles.emoji} />
             <Text style={styles.congratulations}>
               {strings('manual_backup_step_3.congratulations')}

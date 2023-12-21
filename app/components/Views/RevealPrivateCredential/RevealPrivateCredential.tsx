@@ -10,12 +10,14 @@ import {
   View,
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { wordlist } from '@metamask/scure-bip39/dist/wordlists/english';
 import QRCode from 'react-native-qrcode-svg';
 import ScrollableTabView, {
   DefaultTabBar,
 } from 'react-native-scrollable-tab-view';
+const CustomTabView = View as any;
 import Icon from 'react-native-vector-icons/FontAwesome5';
+import AsyncStorage from '../../../store/async-storage-wrapper';
 import ActionView from '../../UI/ActionView';
 import ButtonReveal from '../../UI/ButtonReveal';
 import Button, {
@@ -38,24 +40,19 @@ import Engine from '../../../core/Engine';
 import { BIOMETRY_CHOICE } from '../../../constants/storage';
 import { MetaMetricsEvents } from '../../../core/Analytics';
 import AnalyticsV2 from '../../../util/analyticsV2';
+import { uint8ArrayToMnemonic } from '../../../util/mnemonic';
+import { passwordRequirementsMet } from '../../../util/password';
 import { Authentication } from '../../../core/';
 
 import Device from '../../../util/device';
 import { strings } from '../../../../locales/i18n';
-import { isQRHardwareAccount } from '../../../util/address';
+import { isHardwareAccount } from '../../../util/address';
 import AppConstants from '../../../core/AppConstants';
 import { createStyles } from './styles';
 import { getNavigationOptionsTitle } from '../../../components/UI/Navbar';
 import generateTestId from '../../../../wdio/utils/generateTestId';
-import {
-  PASSWORD_INPUT_BOX_ID,
-  REVEAL_SECRET_RECOVERY_PHRASE_TOUCHABLE_BOX_ID,
-  SECRET_RECOVERY_PHRASE_CANCEL_BUTTON_ID,
-  SECRET_RECOVERY_PHRASE_CONTAINER_ID,
-  SECRET_RECOVERY_PHRASE_LONG_PRESS_BUTTON_ID,
-  SECRET_RECOVERY_PHRASE_NEXT_BUTTON_ID,
-  SECRET_RECOVERY_PHRASE_TEXT,
-} from '../../../../wdio/screen-objects/testIDs/Screens/RevelSecretRecoveryPhrase.testIds';
+import { RevealSeedViewSelectorsIDs } from '../../../../e2e/selectors/Settings/SecurityAndPrivacy/RevealSeedView.selectors';
+
 import { selectSelectedAddress } from '../../../selectors/preferencesController';
 
 const PRIVATE_KEY = 'private_key';
@@ -122,10 +119,8 @@ const RevealPrivateCredential = ({
     try {
       let privateCredential;
       if (!isPrivateKeyReveal) {
-        const mnemonic = await KeyringController.exportSeedPhrase(
-          pswd,
-        ).toString();
-        privateCredential = JSON.stringify(mnemonic).replace(/"/g, '');
+        const uint8ArraySeed = await KeyringController.exportSeedPhrase(pswd);
+        privateCredential = uint8ArrayToMnemonic(uint8ArraySeed, wordlist);
       } else {
         privateCredential = await KeyringController.exportAccount(
           pswd,
@@ -139,7 +134,7 @@ const RevealPrivateCredential = ({
       }
     } catch (e: any) {
       let msg = strings('reveal_credential.warning_incorrect_password');
-      if (isQRHardwareAccount(selectedAddress)) {
+      if (isHardwareAccount(selectedAddress)) {
         msg = strings('reveal_credential.hardware_error');
       } else if (
         e.toString().toLowerCase() !== WRONG_PASSWORD_ERROR.toLowerCase()
@@ -203,20 +198,23 @@ const RevealPrivateCredential = ({
     navigateBack();
   };
 
-  const tryUnlock = () => {
+  const tryUnlock = async () => {
     const { KeyringController } = Engine.context as any;
-    if (KeyringController.validatePassword(password)) {
-      if (!isPrivateKey) {
-        const currentDate = new Date();
-        dispatch(recordSRPRevealTimestamp(currentDate.toString()));
-        AnalyticsV2.trackEvent(MetaMetricsEvents.NEXT_REVEAL_SRP_CTA, {});
-      }
-      setIsModalVisible(true);
-      setWarningIncorrectPassword('');
-    } else {
+    try {
+      await KeyringController.verifyPassword(password);
+    } catch {
       const msg = strings('reveal_credential.warning_incorrect_password');
       setWarningIncorrectPassword(msg);
+      return;
     }
+
+    if (!isPrivateKey) {
+      const currentDate = new Date();
+      dispatch(recordSRPRevealTimestamp(currentDate.toString()));
+      AnalyticsV2.trackEvent(MetaMetricsEvents.NEXT_REVEAL_SRP_CTA, {});
+    }
+    setIsModalVisible(true);
+    setWarningIncorrectPassword('');
   };
 
   const onPasswordChange = (pswd: string) => {
@@ -322,7 +320,7 @@ const RevealPrivateCredential = ({
       renderTabBar={() => renderTabBar()}
       onChangeTab={(event: any) => onTabBarChange(event)}
     >
-      <View
+      <CustomTabView
         tabLabel={strings(`reveal_credential.text`)}
         style={styles.tabContent}
       >
@@ -337,7 +335,7 @@ const RevealPrivateCredential = ({
             selectTextOnFocus
             style={styles.seedPhrase}
             editable={false}
-            {...generateTestId(Platform, SECRET_RECOVERY_PHRASE_TEXT)}
+            testID={RevealSeedViewSelectorsIDs.SECRET_RECOVERY_PHRASE_TEXT}
             placeholderTextColor={colors.text.muted}
             keyboardAppearance={themeAppearance}
           />
@@ -349,16 +347,15 @@ const RevealPrivateCredential = ({
               onPress={() =>
                 copyPrivateCredentialToClipboard(privCredentialName)
               }
-              {...generateTestId(
-                Platform,
-                REVEAL_SECRET_RECOVERY_PHRASE_TOUCHABLE_BOX_ID,
-              )}
+              testID={
+                RevealSeedViewSelectorsIDs.REVEAL_SECRET_RECOVERY_PHRASE_TOUCHABLE_BOX_ID
+              }
               style={styles.clipboardButton}
             />
           ) : null}
         </View>
-      </View>
-      <View
+      </CustomTabView>
+      <CustomTabView
         tabLabel={strings(`reveal_credential.qr_code`)}
         style={styles.tabContent}
       >
@@ -368,7 +365,7 @@ const RevealPrivateCredential = ({
             size={Dimensions.get('window').width - 176}
           />
         </View>
-      </View>
+      </CustomTabView>
     </ScrollableTabView>
   );
 
@@ -385,9 +382,12 @@ const RevealPrivateCredential = ({
         secureTextEntry
         onSubmitEditing={tryUnlock}
         keyboardAppearance={themeAppearance}
-        {...generateTestId(Platform, PASSWORD_INPUT_BOX_ID)}
+        testID={RevealSeedViewSelectorsIDs.PASSWORD_INPUT_BOX_ID}
       />
-      <Text style={styles.warningText} testID={'password-warning'}>
+      <Text
+        style={styles.warningText}
+        testID={RevealSeedViewSelectorsIDs.PASSWORD_WARNING_ID}
+      >
         {warningIncorrectPassword}
       </Text>
     </>
@@ -407,11 +407,6 @@ const RevealPrivateCredential = ({
     );
 
     setIsModalVisible(false);
-  };
-
-  const enableNextButton = () => {
-    const { KeyringController } = Engine.context as any;
-    return KeyringController.validatePassword(password);
   };
 
   const renderModal = (
@@ -460,7 +455,7 @@ const RevealPrivateCredential = ({
             onLongPress={() => revealCredential(privCredentialName)}
             {...generateTestId(
               Platform,
-              SECRET_RECOVERY_PHRASE_LONG_PRESS_BUTTON_ID,
+              RevealSeedViewSelectorsIDs.SECRET_RECOVERY_PHRASE_LONG_PRESS_BUTTON_ID,
             )}
           />
         </>
@@ -520,7 +515,7 @@ const RevealPrivateCredential = ({
   return (
     <View
       style={[styles.wrapper]}
-      {...generateTestId(Platform, SECRET_RECOVERY_PHRASE_CONTAINER_ID)}
+      testID={RevealSeedViewSelectorsIDs.SECRET_RECOVERY_PHRASE_CONTAINER_ID}
     >
       <ActionView
         cancelText={
@@ -532,9 +527,13 @@ const RevealPrivateCredential = ({
         onCancelPress={unlocked ? done : cancelReveal}
         onConfirmPress={() => tryUnlock()}
         showConfirmButton={!unlocked}
-        confirmDisabled={!enableNextButton()}
-        cancelTestID={SECRET_RECOVERY_PHRASE_CANCEL_BUTTON_ID}
-        confirmTestID={SECRET_RECOVERY_PHRASE_NEXT_BUTTON_ID}
+        confirmDisabled={!passwordRequirementsMet(password)}
+        cancelTestID={
+          RevealSeedViewSelectorsIDs.SECRET_RECOVERY_PHRASE_CANCEL_BUTTON_ID
+        }
+        confirmTestID={
+          RevealSeedViewSelectorsIDs.SECRET_RECOVERY_PHRASE_NEXT_BUTTON_ID
+        }
       >
         <>
           <View style={[styles.rowWrapper, styles.normalText]}>

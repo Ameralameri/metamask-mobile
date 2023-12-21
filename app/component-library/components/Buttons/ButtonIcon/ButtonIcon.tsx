@@ -12,43 +12,43 @@ import { useStyles } from '../../../hooks';
 import { ButtonIconProps, ButtonIconVariants } from './ButtonIcon.types';
 import stylesheet from './ButtonIcon.styles';
 import {
-  DEFAULT_BUTTON_ICON_SIZE,
-  DEFAULT_BUTTON_ICON_VARIANTS,
-  ICON_SIZE_BY_BUTTON_ICON_SIZE,
+  DEFAULT_BUTTONICON_SIZE,
+  DEFAULT_BUTTONICON_VARIANTS,
+  ICONSIZE_BY_BUTTONICONSIZE,
 } from './ButtonIcon.constants';
 
 const ButtonIcon = ({
   iconName,
-  variant = DEFAULT_BUTTON_ICON_VARIANTS,
-  disabled,
+  variant = DEFAULT_BUTTONICON_VARIANTS,
   onPressIn,
   onPressOut,
   style,
-  size = DEFAULT_BUTTON_ICON_SIZE,
+  size = DEFAULT_BUTTONICON_SIZE,
   iconColorOverride = undefined,
+  isDisabled = false,
   ...props
 }: ButtonIconProps) => {
+  const [pressed, setPressed] = useState(false);
   const {
     styles,
     theme: { colors },
-  } = useStyles(stylesheet, { style, size });
-  const [pressed, setPressed] = useState(false);
+  } = useStyles(stylesheet, { style, size, pressed, isDisabled });
   const iconColor = useMemo(() => {
     let color: string;
-    if (disabled) {
+    if (isDisabled) {
       color = colors.icon.muted;
     } else {
       switch (variant) {
         case ButtonIconVariants.Primary:
-          color = pressed ? colors.primary.alternative : colors.primary.default;
+          color = colors.primary.default;
           break;
         case ButtonIconVariants.Secondary:
-          color = pressed ? colors.icon.alternative : colors.icon.default;
+          color = colors.icon.default;
           break;
       }
     }
     return color;
-  }, [colors, variant, disabled, pressed]);
+  }, [colors, variant, isDisabled]);
 
   const triggerOnPressedIn = useCallback(
     (e: GestureResponderEvent) => {
@@ -71,13 +71,14 @@ const ButtonIcon = ({
       style={styles.base}
       onPressIn={triggerOnPressedIn}
       onPressOut={triggerOnPressedOut}
-      activeOpacity={0.5}
+      activeOpacity={1}
       accessible
+      disabled={isDisabled}
       {...props}
     >
       <Icon
         name={iconName}
-        size={ICON_SIZE_BY_BUTTON_ICON_SIZE[size]}
+        size={ICONSIZE_BY_BUTTONICONSIZE[size]}
         color={iconColorOverride || iconColor}
       />
     </TouchableOpacity>

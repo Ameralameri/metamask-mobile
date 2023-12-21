@@ -33,14 +33,12 @@ import {
 } from '../../../../constants/error';
 import {
   selectChainId,
-  selectNetwork,
+  selectNetworkConfigurations,
   selectProviderType,
   selectRpcTarget,
 } from '../../../../selectors/networkController';
-import {
-  selectFrequentRpcList,
-  selectIdentities,
-} from '../../../../selectors/preferencesController';
+import { selectIdentities } from '../../../../selectors/preferencesController';
+import { ContractNickNameViewSelectorsIDs } from '../../../../../e2e/selectors/ContractNickNameView.selectors';
 
 const getAnalyticsParams = () => ({});
 
@@ -52,17 +50,16 @@ const AddNickname = (props: AddNicknameProps) => {
     addressNickname,
     providerType,
     providerChainId,
-    providerNetwork,
     providerRpcTarget,
     addressBook,
     identities,
-    frequentRpcList,
+    networkConfigurations,
   } = props;
 
   const [newNickname, setNewNickname] = useState(addressNickname);
   const [addressErr, setAddressErr] = useState(null);
   const [addressHasError, setAddressHasError] = useState(false);
-  const [errContinue, setErrContinue] = useState(false);
+  const [errContinue, setErrContinue] = useState<boolean | undefined>(false);
   const [isBlockExplorerVisible, setIsBlockExplorerVisible] = useState(false);
   const [showFullAddress, setShowFullAddress] = useState(false);
   const [shouldDisableButton, setShouldDisableButton] = useState(true);
@@ -77,16 +74,16 @@ const AddNickname = (props: AddNicknameProps) => {
   const validateAddressOrENSFromInput = useCallback(async () => {
     const { addressError, errorContinue } = await validateAddressOrENS({
       toAccount: address,
-      providerNetwork,
       addressBook,
       identities,
+      // TODO: This parameters is effectively ignored, it should be named `chainId`
       providerChainId,
     });
 
     setAddressErr(addressError);
     setErrContinue(errorContinue);
     setAddressHasError(addressError);
-  }, [address, providerNetwork, addressBook, identities, providerChainId]);
+  }, [address, addressBook, identities, providerChainId]);
 
   useEffect(() => {
     validateAddressOrENSFromInput();
@@ -124,7 +121,7 @@ const AddNickname = (props: AddNicknameProps) => {
     AddressBookController.set(
       toChecksumAddress(address),
       newNickname,
-      providerNetwork,
+      providerChainId,
     );
     closeModal();
     AnalyticsV2.trackEvent(
@@ -159,7 +156,7 @@ const AddNickname = (props: AddNicknameProps) => {
   const hasBlockExplorer = shouldShowBlockExplorer({
     providerType,
     providerRpcTarget,
-    frequentRpcList,
+    networkConfigurations,
   });
 
   return (
@@ -173,7 +170,7 @@ const AddNickname = (props: AddNicknameProps) => {
           headerTextStyle={styles.headerText}
           iconStyle={styles.icon}
           providerRpcTarget={providerRpcTarget}
-          frequentRpcList={[]}
+          networkConfigurations={{}}
         />
       ) : (
         <>
@@ -184,7 +181,10 @@ const AddNickname = (props: AddNicknameProps) => {
             headerTextStyle={styles.headerText}
             iconStyle={styles.icon}
           />
-          <View style={styles.bodyWrapper} testID={'contract-nickname-view'}>
+          <View
+            style={styles.bodyWrapper}
+            testID={ContractNickNameViewSelectorsIDs.CONTAINER}
+          >
             {showFullAddress && (
               <InfoModal
                 isVisible
@@ -231,7 +231,7 @@ const AddNickname = (props: AddNicknameProps) => {
               style={styles.input}
               value={newNickname}
               editable={!addressHasError}
-              testID={'contract-name-input'}
+              testID={ContractNickNameViewSelectorsIDs.NAME_INPUT}
               keyboardAppearance={themeAppearance}
             />
             {addressHasError && (
@@ -249,7 +249,7 @@ const AddNickname = (props: AddNicknameProps) => {
               type={'confirm'}
               disabled={shouldDisableButton}
               onPress={saveTokenNickname}
-              testID={'nickname.save_nickname'}
+              testID={ContractNickNameViewSelectorsIDs.CONFIRM_BUTTON}
             >
               {strings('nickname.save_nickname')}
             </StyledButton>
@@ -265,10 +265,9 @@ const mapStateToProps = (state: any) => ({
   providerType: selectProviderType(state),
   providerRpcTarget: selectRpcTarget(state),
   providerChainId: selectChainId(state),
-  providerNetwork: selectNetwork(state),
   addressBook: state.engine.backgroundState.AddressBookController.addressBook,
   identities: selectIdentities(state),
-  frequentRpcList: selectFrequentRpcList(state),
+  networkConfigurations: selectNetworkConfigurations(state),
 });
 
 const mapDispatchToProps = (dispatch: any) => ({

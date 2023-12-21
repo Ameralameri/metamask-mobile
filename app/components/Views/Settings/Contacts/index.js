@@ -1,5 +1,5 @@
 import React, { PureComponent } from 'react';
-import { Platform, SafeAreaView, StyleSheet } from 'react-native';
+import { SafeAreaView, StyleSheet } from 'react-native';
 import PropTypes from 'prop-types';
 import { strings } from '../../../../../locales/i18n';
 import { getNavigationOptionsTitle } from '../../../UI/Navbar';
@@ -9,13 +9,10 @@ import StyledButton from '../../../UI/StyledButton';
 import Engine from '../../../../core/Engine';
 import ActionSheet from 'react-native-actionsheet';
 import { mockTheme, ThemeContext } from '../../../../util/theme';
-import { selectNetwork } from '../../../../selectors/networkController';
+import { selectChainId } from '../../../../selectors/networkController';
+import Routes from '../../../../../app/constants/navigation/Routes';
 
-import generateTestId from '../../../../../wdio/utils/generateTestId';
-import {
-  CONTACT_ADD_BUTTON,
-  CONTACTS_CONTAINER_ID,
-} from '../../../../../wdio/screen-objects/testIDs/Screens/Contacts.testids';
+import { ContactsViewSelectorIDs } from '../../../../../e2e/selectors/Settings/Contacts/ContacsView.selectors';
 
 const createStyles = (colors) =>
   StyleSheet.create({
@@ -47,9 +44,9 @@ class Contacts extends PureComponent {
      */
     navigation: PropTypes.object,
     /**
-     * Network id
+     * The chain ID for the current selected network
      */
-    network: PropTypes.string,
+    chainId: PropTypes.string,
   };
 
   state = {
@@ -78,12 +75,12 @@ class Contacts extends PureComponent {
 
   componentDidUpdate = (prevProps) => {
     this.updateNavBar();
-    const { network } = this.props;
+    const { chainId } = this.props;
     if (
       prevProps.addressBook &&
       this.props.addressBook &&
-      JSON.stringify(prevProps.addressBook[network]) !==
-        JSON.stringify(this.props.addressBook[network])
+      JSON.stringify(prevProps.addressBook[chainId]) !==
+        JSON.stringify(this.props.addressBook[chainId])
     )
       this.updateAddressList();
   };
@@ -102,8 +99,8 @@ class Contacts extends PureComponent {
 
   deleteContact = () => {
     const { AddressBookController } = Engine.context;
-    const { network } = this.props;
-    AddressBookController.delete(network, this.contactAddressToRemove);
+    const { chainId } = this.props;
+    AddressBookController.delete(chainId, this.contactAddressToRemove);
     this.updateAddressList();
   };
 
@@ -124,6 +121,13 @@ class Contacts extends PureComponent {
     this.actionSheet = ref;
   };
 
+  onIconPress = () => {
+    const { navigation } = this.props;
+    navigation.navigate(Routes.MODAL.ROOT_MODAL_FLOW, {
+      screen: Routes.SHEET.AMBIGUOUS_ADDRESS,
+    });
+  };
+
   render = () => {
     const { reloadAddressList } = this.state;
     const colors = this.context.colors || mockTheme.colors;
@@ -133,19 +137,20 @@ class Contacts extends PureComponent {
     return (
       <SafeAreaView
         style={styles.wrapper}
-        {...generateTestId(Platform, CONTACTS_CONTAINER_ID)}
+        testID={ContactsViewSelectorIDs.CONTAINER}
       >
         <AddressList
           onlyRenderAddressBook
           reloadAddressList={reloadAddressList}
           onAccountPress={this.onAddressPress}
+          onIconPress={this.onIconPress}
           onAccountLongPress={this.onAddressLongPress}
         />
         <StyledButton
           type={'confirm'}
           containerStyle={styles.addContact}
           onPress={this.goToAddContact}
-          testID={CONTACT_ADD_BUTTON}
+          testID={ContactsViewSelectorIDs.ADD_BUTTON}
         >
           {strings('address_book.add_contact')}
         </StyledButton>
@@ -171,7 +176,7 @@ Contacts.contextType = ThemeContext;
 
 const mapStateToProps = (state) => ({
   addressBook: state.engine.backgroundState.AddressBookController.addressBook,
-  network: selectNetwork(state),
+  chainId: selectChainId(state),
 });
 
 export default connect(mapStateToProps)(Contacts);

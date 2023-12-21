@@ -7,20 +7,43 @@ import { WALLET_CONNECT_ORIGIN } from '../walletconnect';
 import AppConstants from '../../core/AppConstants';
 import { InteractionManager } from 'react-native';
 import { strings } from '../../../locales/i18n';
+import { selectChainId } from '../../selectors/networkController';
+import { store } from '../../store';
+import { getBlockaidMetricsParams } from '../blockaid';
+import Device from '../device';
 
-export const getAnalyticsParams = (messageParams, signType) => {
+export const typedSign = {
+  V1: 'eth_signTypedData',
+  V3: 'eth_signTypedData_v3',
+  V4: 'eth_signTypedData_v4',
+};
+
+export const getAnalyticsParams = (
+  messageParams,
+  signType,
+  securityAlertResponse,
+) => {
   try {
-    const { currentPageInformation } = messageParams;
-    const { NetworkController } = Engine.context;
-    const { chainId } = NetworkController?.state?.providerConfig || {};
-    const url = new URL(currentPageInformation?.url);
+    const { currentPageInformation, meta } = messageParams;
+    const pageInfo = meta || currentPageInformation || {};
+
+    const chainId = selectChainId(store.getState());
+
+    const url = pageInfo.url && new URL(pageInfo?.url);
+
+    let blockaidParams = {};
+    if (securityAlertResponse) {
+      blockaidParams = getBlockaidMetricsParams(securityAlertResponse);
+    }
+
     return {
       account_type: getAddressAccountType(messageParams.from),
-      dapp_host_name: url?.host,
+      dapp_host_name: url && url?.host,
       chain_id: chainId,
-      sign_type: signType,
+      signature_type: signType,
       version: messageParams?.version,
-      ...currentPageInformation?.analytics,
+      ...pageInfo?.analytics,
+      ...blockaidParams,
     };
   } catch (error) {
     return {};
@@ -40,17 +63,25 @@ export const showWalletConnectNotification = (
   isError = false,
 ) => {
   InteractionManager.runAfterInteractions(() => {
-    messageParams.origin &&
-      (messageParams.origin.startsWith(WALLET_CONNECT_ORIGIN) ||
-        messageParams.origin.startsWith(
-          AppConstants.MM_SDK.SDK_REMOTE_ORIGIN,
-        )) &&
+    /**
+     * FIXME: need to rewrite the way BackgroundBridge sets the origin.
+     */
+    const origin = messageParams.origin.toLowerCase().replaceAll(':', '');
+    const isWCOrigin = origin.startsWith(
+      WALLET_CONNECT_ORIGIN.replaceAll(':', '').toLowerCase(),
+    );
+    const isSDKOrigin = origin.startsWith(
+      AppConstants.MM_SDK.SDK_REMOTE_ORIGIN.replaceAll(':', '').toLowerCase(),
+    );
+
+    if (isWCOrigin || isSDKOrigin) {
       NotificationManager.showSimpleNotification({
         status: `simple_notification${!confirmation ? '_rejected' : ''}`,
         duration: 5000,
-        title: this.walletConnectNotificationTitle(confirmation, isError),
+        title: walletConnectNotificationTitle(confirmation, isError),
         description: strings('notifications.wc_description'),
       });
+    }
   });
 };
 
@@ -58,15 +89,16 @@ export const handleSignatureAction = async (
   onAction,
   messageParams,
   signType,
+  securityAlertResponse,
   confirmation,
 ) => {
   await onAction();
   showWalletConnectNotification(messageParams, confirmation);
   AnalyticsV2.trackEvent(
     confirmation
-      ? MetaMetricsEvents.SIGN_REQUEST_COMPLETED
-      : MetaMetricsEvents.SIGN_REQUEST_CANCELLED,
-    getAnalyticsParams(messageParams, signType),
+      ? MetaMetricsEvents.SIGNATURE_APPROVED
+      : MetaMetricsEvents.SIGNATURE_REJECTED,
+    getAnalyticsParams(messageParams, signType, securityAlertResponse),
   );
 };
 
@@ -82,4 +114,15 @@ export const removeSignatureErrorListener = (metamaskId, onSignatureError) => {
     `${metamaskId}:signError`,
     onSignatureError,
   );
+};
+
+export const shouldTruncateMessage = (e) => {
+  if (
+    (Device.isIos() && e.nativeEvent.layout.height > 70) ||
+    (Device.isAndroid() && e.nativeEvent.layout.height > 100)
+  ) {
+    return true;
+  }
+
+  return false;
 };

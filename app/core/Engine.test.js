@@ -22,6 +22,7 @@ describe('Engine', () => {
     expect(engine.context).toHaveProperty('TokenBalancesController');
     expect(engine.context).toHaveProperty('TokenRatesController');
     expect(engine.context).toHaveProperty('TokensController');
+    expect(engine.context).toHaveProperty('LoggingController');
   });
 
   it('calling Engine.init twice returns the same instance', () => {
@@ -40,12 +41,30 @@ describe('Engine', () => {
   // Use this to keep the unit test initial background state fixture up-to-date
   it('matches initial state fixture', () => {
     const engine = Engine.init({});
-    const backgroundState = engine.datamodel.state;
+    let backgroundState = engine.datamodel.state;
     // Replace phishing controller fallback config, as it bloats the test fixture too much
-    backgroundState.PhishingController.listState.allowlist = [];
-    backgroundState.PhishingController.listState.blocklist = [];
-    backgroundState.PhishingController.listState.fuzzylist = [];
+    backgroundState.PhishingController.phishingLists[0].allowlist = [];
+    backgroundState.PhishingController.phishingLists[0].blocklist = [];
+    backgroundState.PhishingController.phishingLists[0].fuzzylist = [];
 
-    expect(engine.datamodel.state).toStrictEqual(initialState);
+    // deleting lastVisited from chainStatus, since its timestamp it makes the test case fail
+    const { chainId, dataFetched, versionInfo } =
+      backgroundState.PPOMController.chainStatus['0x1'];
+    backgroundState = {
+      ...backgroundState,
+      PPOMController: {
+        ...backgroundState.PPOMController,
+        chainStatus: {
+          ...backgroundState.PPOMController.chainStatus,
+          '0x1': {
+            chainId,
+            dataFetched,
+            versionInfo,
+          },
+        },
+      },
+    };
+
+    expect(backgroundState).toStrictEqual(initialState);
   });
 });

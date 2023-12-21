@@ -1,7 +1,8 @@
+import './shim.js';
+
 // Needed to polyfill random number generation.
 import 'react-native-get-random-values';
 import '@walletconnect/react-native-compat';
-import './shim.js';
 
 import 'react-native-gesture-handler';
 import 'react-native-url-polyfill/auto';
@@ -10,7 +11,7 @@ import crypto from 'crypto'; // eslint-disable-line import/no-nodejs-modules, no
 require('react-native-browser-polyfill'); // eslint-disable-line import/no-commonjs
 
 import * as Sentry from '@sentry/react-native'; // eslint-disable-line import/no-namespace
-import { setupSentry } from './app/util/sentryUtils';
+import { setupSentry } from './app/util/sentry/utils';
 setupSentry();
 
 import { AppRegistry, LogBox } from 'react-native';
@@ -64,6 +65,8 @@ LogBox.ignoreLogs([
   'Module RCTSearchApiManager requires main queue setup',
   'PushNotificationIOS has been extracted', // RNC PushNotification iOS issue - https://github.com/react-native-push-notification/ios/issues/43
   "ViewPropTypes will be removed from React Native, along with all other PropTypes. We recommend that you migrate away from PropTypes and switch to a type system like TypeScript. If you need to continue using ViewPropTypes, migrate to the 'deprecated-react-native-prop-types' package.",
+  'ReactImageView: Image source "null"',
+  'Warning: componentWillReceiveProps has been renamed',
 ]);
 
 const IGNORE_BOXLOGS_DEVELOPMENT = process.env.IGNORE_BOXLOGS_DEVELOPMENT;
@@ -73,7 +76,7 @@ if (IGNORE_BOXLOGS_DEVELOPMENT === 'true') {
 }
 
 /* Uncomment and comment regular registration below */
-// import Storybook from './storybook';
+// import Storybook from './.storybook';
 // AppRegistry.registerComponent(name, () => Storybook);
 
 /**

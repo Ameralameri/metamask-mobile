@@ -422,6 +422,7 @@ exports[`Tokens should hide zero balance tokens when setting is on 1`] = `
                               }
                             >
                               <Text
+                                accessibilityRole="text"
                                 style={
                                   Object {
                                     "color": "#24272A",
@@ -437,7 +438,7 @@ exports[`Tokens should hide zero balance tokens when setting is on 1`] = `
                                 0 USD
                               </Text>
                               <TouchableOpacity
-                                activeOpacity={0.5}
+                                activeOpacity={1}
                                 onPress={[Function]}
                                 onPressIn={[Function]}
                                 onPressOut={[Function]}
@@ -460,6 +461,7 @@ exports[`Tokens should hide zero balance tokens when setting is on 1`] = `
                                 variant="Secondary"
                               >
                                 <Text
+                                  accessibilityRole="text"
                                   style={
                                     Object {
                                       "color": "#0376C9",
@@ -662,9 +664,9 @@ exports[`Tokens should hide zero balance tokens when setting is on 1`] = `
                                     "marginLeft": 20,
                                   }
                                 }
-                                testID="balance"
                               >
                                 <Text
+                                  accessibilityRole="text"
                                   style={
                                     Object {
                                       "color": "#24272A",
@@ -679,6 +681,7 @@ exports[`Tokens should hide zero balance tokens when setting is on 1`] = `
                                   Ethereum
                                 </Text>
                                 <Text
+                                  accessibilityRole="text"
                                   style={
                                     Object {
                                       "color": "#535A61",
@@ -695,6 +698,7 @@ exports[`Tokens should hide zero balance tokens when setting is on 1`] = `
                                 </Text>
                               </View>
                               <Text
+                                accessibilityRole="text"
                                 style={
                                   Object {
                                     "color": "#24272A",
@@ -750,6 +754,7 @@ exports[`Tokens should hide zero balance tokens when setting is on 1`] = `
                                         "width": 32,
                                       }
                                     }
+                                    variant="Token"
                                   >
                                     <Image
                                       onError={[Function]}
@@ -850,9 +855,9 @@ exports[`Tokens should hide zero balance tokens when setting is on 1`] = `
                                     "marginLeft": 20,
                                   }
                                 }
-                                testID="balance"
                               >
                                 <Text
+                                  accessibilityRole="text"
                                   style={
                                     Object {
                                       "color": "#24272A",
@@ -867,6 +872,7 @@ exports[`Tokens should hide zero balance tokens when setting is on 1`] = `
                                   Bat
                                 </Text>
                                 <Text
+                                  accessibilityRole="text"
                                   style={
                                     Object {
                                       "color": "#535A61",
@@ -883,6 +889,7 @@ exports[`Tokens should hide zero balance tokens when setting is on 1`] = `
                                 </Text>
                               </View>
                               <Text
+                                accessibilityRole="text"
                                 style={
                                   Object {
                                     "color": "#24272A",
@@ -924,6 +931,7 @@ exports[`Tokens should hide zero balance tokens when setting is on 1`] = `
                                 testID="import-token-button"
                               >
                                 <Text
+                                  accessibilityRole="text"
                                   style={
                                     Object {
                                       "color": "#24272A",
@@ -937,6 +945,7 @@ exports[`Tokens should hide zero balance tokens when setting is on 1`] = `
                                   }
                                 >
                                   <Text
+                                    accessibilityRole="text"
                                     style={
                                       Object {
                                         "color": "#535A61",
@@ -953,6 +962,7 @@ exports[`Tokens should hide zero balance tokens when setting is on 1`] = `
                                   </Text>
                                    
                                   <Text
+                                    accessibilityRole="text"
                                     style={
                                       Object {
                                         "color": "#0376C9",
@@ -1407,6 +1417,7 @@ exports[`Tokens should render correctly 1`] = `
                               }
                             >
                               <Text
+                                accessibilityRole="text"
                                 style={
                                   Object {
                                     "color": "#24272A",
@@ -1422,7 +1433,7 @@ exports[`Tokens should render correctly 1`] = `
                                 0 USD
                               </Text>
                               <TouchableOpacity
-                                activeOpacity={0.5}
+                                activeOpacity={1}
                                 onPress={[Function]}
                                 onPressIn={[Function]}
                                 onPressOut={[Function]}
@@ -1445,6 +1456,7 @@ exports[`Tokens should render correctly 1`] = `
                                 variant="Secondary"
                               >
                                 <Text
+                                  accessibilityRole="text"
                                   style={
                                     Object {
                                       "color": "#0376C9",
@@ -1647,9 +1659,9 @@ exports[`Tokens should render correctly 1`] = `
                                     "marginLeft": 20,
                                   }
                                 }
-                                testID="balance"
                               >
                                 <Text
+                                  accessibilityRole="text"
                                   style={
                                     Object {
                                       "color": "#24272A",
@@ -1664,6 +1676,7 @@ exports[`Tokens should render correctly 1`] = `
                                   Ethereum
                                 </Text>
                                 <Text
+                                  accessibilityRole="text"
                                   style={
                                     Object {
                                       "color": "#535A61",
@@ -1680,6 +1693,7 @@ exports[`Tokens should render correctly 1`] = `
                                 </Text>
                               </View>
                               <Text
+                                accessibilityRole="text"
                                 style={
                                   Object {
                                     "color": "#24272A",
@@ -1735,6 +1749,7 @@ exports[`Tokens should render correctly 1`] = `
                                         "width": 32,
                                       }
                                     }
+                                    variant="Token"
                                   >
                                     <Image
                                       onError={[Function]}
@@ -1835,9 +1850,9 @@ exports[`Tokens should render correctly 1`] = `
                                     "marginLeft": 20,
                                   }
                                 }
-                                testID="balance"
                               >
                                 <Text
+                                  accessibilityRole="text"
                                   style={
                                     Object {
                                       "color": "#24272A",
@@ -1852,6 +1867,7 @@ exports[`Tokens should render correctly 1`] = `
                                   Bat
                                 </Text>
                                 <Text
+                                  accessibilityRole="text"
                                   style={
                                     Object {
                                       "color": "#535A61",
@@ -1868,6 +1884,7 @@ exports[`Tokens should render correctly 1`] = `
                                 </Text>
                               </View>
                               <Text
+                                accessibilityRole="text"
                                 style={
                                   Object {
                                     "color": "#24272A",
@@ -1909,6 +1926,7 @@ exports[`Tokens should render correctly 1`] = `
                                 testID="import-token-button"
                               >
                                 <Text
+                                  accessibilityRole="text"
                                   style={
                                     Object {
                                       "color": "#24272A",
@@ -1922,6 +1940,7 @@ exports[`Tokens should render correctly 1`] = `
                                   }
                                 >
                                   <Text
+                                    accessibilityRole="text"
                                     style={
                                       Object {
                                         "color": "#535A61",
@@ -1938,6 +1957,7 @@ exports[`Tokens should render correctly 1`] = `
                                   </Text>
                                    
                                   <Text
+                                    accessibilityRole="text"
                                     style={
                                       Object {
                                         "color": "#0376C9",
@@ -2400,6 +2420,7 @@ exports[`Tokens should show all balance tokens when hideZeroBalanceTokens settin
                               }
                             >
                               <Text
+                                accessibilityRole="text"
                                 style={
                                   Object {
                                     "color": "#24272A",
@@ -2415,7 +2436,7 @@ exports[`Tokens should show all balance tokens when hideZeroBalanceTokens settin
                                 0 USD
                               </Text>
                               <TouchableOpacity
-                                activeOpacity={0.5}
+                                activeOpacity={1}
                                 onPress={[Function]}
                                 onPressIn={[Function]}
                                 onPressOut={[Function]}
@@ -2438,6 +2459,7 @@ exports[`Tokens should show all balance tokens when hideZeroBalanceTokens settin
                                 variant="Secondary"
                               >
                                 <Text
+                                  accessibilityRole="text"
                                   style={
                                     Object {
                                       "color": "#0376C9",
@@ -2640,9 +2662,9 @@ exports[`Tokens should show all balance tokens when hideZeroBalanceTokens settin
                                     "marginLeft": 20,
                                   }
                                 }
-                                testID="balance"
                               >
                                 <Text
+                                  accessibilityRole="text"
                                   style={
                                     Object {
                                       "color": "#24272A",
@@ -2657,6 +2679,7 @@ exports[`Tokens should show all balance tokens when hideZeroBalanceTokens settin
                                   Ethereum
                                 </Text>
                                 <Text
+                                  accessibilityRole="text"
                                   style={
                                     Object {
                                       "color": "#535A61",
@@ -2673,6 +2696,7 @@ exports[`Tokens should show all balance tokens when hideZeroBalanceTokens settin
                                 </Text>
                               </View>
                               <Text
+                                accessibilityRole="text"
                                 style={
                                   Object {
                                     "color": "#24272A",
@@ -2728,6 +2752,7 @@ exports[`Tokens should show all balance tokens when hideZeroBalanceTokens settin
                                         "width": 32,
                                       }
                                     }
+                                    variant="Token"
                                   >
                                     <Image
                                       onError={[Function]}
@@ -2828,9 +2853,9 @@ exports[`Tokens should show all balance tokens when hideZeroBalanceTokens settin
                                     "marginLeft": 20,
                                   }
                                 }
-                                testID="balance"
                               >
                                 <Text
+                                  accessibilityRole="text"
                                   style={
                                     Object {
                                       "color": "#24272A",
@@ -2845,6 +2870,7 @@ exports[`Tokens should show all balance tokens when hideZeroBalanceTokens settin
                                   Bat
                                 </Text>
                                 <Text
+                                  accessibilityRole="text"
                                   style={
                                     Object {
                                       "color": "#535A61",
@@ -2861,6 +2887,7 @@ exports[`Tokens should show all balance tokens when hideZeroBalanceTokens settin
                                 </Text>
                               </View>
                               <Text
+                                accessibilityRole="text"
                                 style={
                                   Object {
                                     "color": "#24272A",
@@ -2916,6 +2943,7 @@ exports[`Tokens should show all balance tokens when hideZeroBalanceTokens settin
                                         "width": 32,
                                       }
                                     }
+                                    variant="Token"
                                   >
                                     <Image
                                       onError={[Function]}
@@ -3016,9 +3044,9 @@ exports[`Tokens should show all balance tokens when hideZeroBalanceTokens settin
                                     "marginLeft": 20,
                                   }
                                 }
-                                testID="balance"
                               >
                                 <Text
+                                  accessibilityRole="text"
                                   style={
                                     Object {
                                       "color": "#24272A",
@@ -3033,6 +3061,7 @@ exports[`Tokens should show all balance tokens when hideZeroBalanceTokens settin
                                   Link
                                 </Text>
                                 <Text
+                                  accessibilityRole="text"
                                   style={
                                     Object {
                                       "color": "#535A61",
@@ -3049,6 +3078,7 @@ exports[`Tokens should show all balance tokens when hideZeroBalanceTokens settin
                                 </Text>
                               </View>
                               <Text
+                                accessibilityRole="text"
                                 style={
                                   Object {
                                     "color": "#24272A",
@@ -3090,6 +3120,7 @@ exports[`Tokens should show all balance tokens when hideZeroBalanceTokens settin
                                 testID="import-token-button"
                               >
                                 <Text
+                                  accessibilityRole="text"
                                   style={
                                     Object {
                                       "color": "#24272A",
@@ -3103,6 +3134,7 @@ exports[`Tokens should show all balance tokens when hideZeroBalanceTokens settin
                                   }
                                 >
                                   <Text
+                                    accessibilityRole="text"
                                     style={
                                       Object {
                                         "color": "#535A61",
@@ -3119,6 +3151,7 @@ exports[`Tokens should show all balance tokens when hideZeroBalanceTokens settin
                                   </Text>
                                    
                                   <Text
+                                    accessibilityRole="text"
                                     style={
                                       Object {
                                         "color": "#0376C9",

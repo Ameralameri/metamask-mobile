@@ -1,4 +1,9 @@
 import { waitFor, web } from 'detox';
+import {
+  getFixturesServerPort,
+  getGanachePort,
+  getLocalTestDappPort,
+} from './fixtures/utils';
 export default class TestHelpers {
   static async waitAndTap(elementId, timeout, index) {
     await waitFor(element(by.id(elementId)))
@@ -145,6 +150,7 @@ export default class TestHelpers {
       newInstance: true,
       url: inputURL,
       sourceApp: 'io.metamask',
+      launchArgs: { fixtureServerPort: `${getFixturesServerPort()}` },
     });
   }
 
@@ -162,6 +168,14 @@ export default class TestHelpers {
 
   static async checkIfElementWithTextIsNotVisible(text) {
     return await expect(element(by.text(text)).atIndex(0)).not.toBeVisible();
+  }
+
+  static async checkIfElementNotToHaveText(elementId, text) {
+    await waitFor(element(by.id(elementId)))
+      .toBeVisible()
+      .withTimeout(10000);
+
+    return expect(element(by.id(elementId))).not.toHaveText(text);
   }
 
   static async checkIfExists(elementId) {
@@ -212,6 +226,20 @@ export default class TestHelpers {
         resolve();
       }, ms);
     });
+  } // Detox has no waits for webview elements visibility. Here is the custom one.
+
+  static async waitForWebElementToBeVisibleById(elementId, timeout = 15000) {
+    const start = Date.now();
+    while (Date.now() - start < timeout) {
+      try {
+        await expect(web.element(by.web.id(elementId))).toExist(); // Element found
+        return;
+      } catch {
+        // Element not found yet: waiting for 200ms
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+    }
+    throw new Error('Element with ' + elementId + ' not found');
   }
 
   static async retry(maxAttempts, testLogic) {
@@ -230,6 +258,14 @@ export default class TestHelpers {
           });
         }
       }
+    }
+  }
+
+  static async reverseServerPort() {
+    if (device.getPlatform() === 'android') {
+      await device.reverseTcpPort(getGanachePort());
+      await device.reverseTcpPort(getFixturesServerPort());
+      await device.reverseTcpPort(getLocalTestDappPort());
     }
   }
 }

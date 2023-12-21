@@ -5,7 +5,6 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
-  Text,
   TextInput,
   TouchableOpacity,
   View,
@@ -29,7 +28,10 @@ import {
   doENSReverseLookup,
   isDefaultAccountName,
 } from '../../../util/ENSUtils';
-import { isQRHardwareAccount, renderAccountName } from '../../../util/address';
+import {
+  getLabelTextByAddress,
+  renderAccountName,
+} from '../../../util/address';
 import Device from '../../../util/device';
 import { ThemeContext, mockTheme } from '../../../util/theme';
 import EthereumAddress from '../EthereumAddress';
@@ -38,13 +40,17 @@ import { MetaMetricsEvents } from '../../../core/Analytics';
 import Analytics from '../../../core/Analytics/Analytics';
 import AppConstants from '../../../core/AppConstants';
 import Engine from '../../../core/Engine';
-import { selectNetwork } from '../../../selectors/networkController';
+import { selectChainId } from '../../../selectors/networkController';
 import { selectCurrentCurrency } from '../../../selectors/currencyRateController';
 import {
   selectIdentities,
   selectSelectedAddress,
 } from '../../../selectors/preferencesController';
 import { createAccountSelectorNavDetails } from '../../Views/AccountSelector';
+import { regex } from '../../../util/regex';
+import Text, {
+  TextVariant,
+} from '../../../component-library/components/Texts/Text';
 
 const createStyles = (colors) =>
   StyleSheet.create({
@@ -90,8 +96,6 @@ const createStyles = (colors) =>
       borderRadius: 14,
     },
     tagText: {
-      fontSize: 12,
-      ...fontStyles.bold,
       minWidth: 32,
       textAlign: 'center',
       color: colors.text.default,
@@ -196,9 +200,9 @@ class AccountOverview extends PureComponent {
      */
     toggleReceiveModal: PropTypes.func,
     /**
-     * ID of the current network
+     * The chain ID for the current selected network
      */
-    network: PropTypes.string,
+    chainId: PropTypes.string,
     /**
      * Current opens tabs in browser
      */
@@ -245,7 +249,7 @@ class AccountOverview extends PureComponent {
   componentDidUpdate(prevProps) {
     if (
       prevProps.account.address !== this.props.account.address ||
-      prevProps.network !== this.props.network
+      prevProps.chainId !== this.props.chainId
     ) {
       requestAnimationFrame(() => {
         this.doENSLookup();
@@ -304,9 +308,9 @@ class AccountOverview extends PureComponent {
   };
 
   doENSLookup = async () => {
-    const { network, account } = this.props;
+    const { chainId, account } = this.props;
     try {
-      const ens = await doENSReverseLookup(account.address, network);
+      const ens = await doENSReverseLookup(account.address, chainId);
       this.setState({ ens });
       // eslint-disable-next-line no-empty
     } catch {}
@@ -315,7 +319,7 @@ class AccountOverview extends PureComponent {
   onOpenPortfolio = () => {
     const { navigation, browserTabs } = this.props;
     const existingPortfolioTab = browserTabs.find((tab) =>
-      tab.url.match(new RegExp(`${AppConstants.PORTFOLIO_URL}/(?![a-z])`)),
+      tab.url.match(regex.portfolioUrl),
     );
     let existingTabId;
     let newTabUrl;
@@ -350,7 +354,7 @@ class AccountOverview extends PureComponent {
     if (!address) return null;
     const { accountLabelEditable, accountLabel, ens } = this.state;
 
-    const isQRHardwareWalletAccount = isQRHardwareAccount(address);
+    const accountLabelTag = getLabelTextByAddress(address);
 
     return (
       <View ref={this.scrollViewContainer} collapsable={false}>
@@ -359,7 +363,6 @@ class AccountOverview extends PureComponent {
           keyboardShouldPersistTaps={'never'}
           style={styles.scrollView}
           contentContainerStyle={styles.wrapper}
-          testID={'account-overview'}
         >
           <View style={styles.info} ref={this.mainView}>
             <TouchableOpacity
@@ -426,10 +429,13 @@ class AccountOverview extends PureComponent {
                       {isDefaultAccountName(name) && ens ? ens : name}
                     </Text>
                   </TouchableOpacity>
-                  {isQRHardwareWalletAccount && (
+                  {accountLabelTag && (
                     <View style={styles.tag}>
-                      <Text style={styles.tagText}>
-                        {strings('transaction.hardware')}
+                      <Text
+                        variant={TextVariant.BodySMBold}
+                        style={styles.tagText}
+                      >
+                        {strings(accountLabelTag)}
                       </Text>
                     </View>
                   )}
@@ -458,7 +464,7 @@ const mapStateToProps = (state) => ({
   selectedAddress: selectSelectedAddress(state),
   identities: selectIdentities(state),
   currentCurrency: selectCurrentCurrency(state),
-  network: String(selectNetwork(state)),
+  chainId: selectChainId(state),
   browserTabs: state.browser.tabs,
 });
 

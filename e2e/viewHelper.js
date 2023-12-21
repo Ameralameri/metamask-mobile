@@ -22,12 +22,14 @@ import TestHelpers from './helpers';
 
 import TermsOfUseModal from './pages/modals/TermsOfUseModal';
 import TabBarComponent from './pages/TabBarComponent';
+import LoginView from './pages/LoginView';
+import { getGanachePort } from './fixtures/utils';
 
 const GOERLI = 'Goerli Test Network';
 
-const LOCALHOST_URL = 'http://localhost:8545/';
+const LOCALHOST_URL = `http://localhost:${getGanachePort()}/`;
 
-// detox on ios does not have a clean way of interacting with webview eleemnts. You would need to tap by coordinates
+// detox on ios does not have a clean way of interacting with webview elements. You would need to tap by coordinates
 export const testDappConnectButtonCooridinates = { x: 170, y: 280 };
 export const testDappSendEIP1559ButtonCoordinates = { x: 320, y: 500 };
 const validAccount = Accounts.getValidAccount();
@@ -180,4 +182,19 @@ export const switchToGoreliNetwork = async () => {
   await NetworkListModal.changeNetwork(GOERLI);
   await WalletView.isNetworkNameVisible(GOERLI);
   await NetworkEducationModal.tapGotItButton();
+};
+
+export const loginToApp = async () => {
+  const PASSWORD = '123123123';
+  await LoginView.isVisible();
+  await LoginView.enterPassword(PASSWORD);
+
+  await WalletView.isVisible();
+  await TestHelpers.delay(2500);
+  try {
+    await WhatsNewModal.isVisible();
+    await WhatsNewModal.tapCloseButton();
+  } catch {
+    //
+  }
 };

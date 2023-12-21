@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-shadow */
 // Third party dependencies.
 import React from 'react';
 import { ViewProps } from 'react-native';
@@ -8,12 +9,14 @@ import { SvgProps } from 'react-native-svg';
  */
 export enum IconColor {
   Default = 'Default',
+  Inverse = 'Inverse',
   Alternative = 'Alternative',
   Muted = 'Muted',
   Primary = 'Primary',
+  PrimaryAlternative = 'Primary',
   Success = 'Success',
-  // eslint-disable-next-line @typescript-eslint/no-shadow
   Error = 'Error',
+  ErrorAlternative = 'ErrorAlternative',
   Warning = 'Warning',
   Info = 'Info',
 }
@@ -139,6 +142,7 @@ export enum IconName {
   Hardware = 'Hardware',
   Heart = 'Heart',
   Hierarchy = 'Hierarchy',
+  Home2 = 'Home2',
   Home = 'Home',
   Import = 'Import',
   Info = 'Info',
@@ -167,7 +171,9 @@ export enum IconName {
   Notification = 'Notification',
   PasswordCheck = 'PasswordCheck',
   People = 'People',
+  Plant = 'Plant',
   Plug = 'Plug',
+  PlusAndMinus = 'PlusAndMinus',
   ProgrammingArrows = 'ProgrammingArrows',
   QrCode = 'QrCode',
   Question = 'Question',
@@ -195,7 +201,9 @@ export enum IconName {
   Slash = 'Slash',
   SnapsMobile = 'SnapsMobile',
   SnapsPlus = 'SnapsPlus',
+  SnapsRound = 'SnapsRound',
   Snaps = 'Snaps',
+  Sparkle = 'Sparkle',
   Speedometer = 'Speedometer',
   Square = 'Square',
   Star = 'Star',
@@ -205,6 +213,7 @@ export enum IconName {
   Tag = 'Tag',
   Tilde = 'Tilde',
   Timer = 'Timer',
+  Tint = 'Tint',
   Trash = 'Trash',
   TrendDown = 'TrendDown',
   TrendUp = 'TrendUp',

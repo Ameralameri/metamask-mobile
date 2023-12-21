@@ -77,7 +77,10 @@ import { decGWEIToHexWEI } from '../../../util/conversions';
 import FadeAnimationView from '../FadeAnimationView';
 import Logger from '../../../util/Logger';
 import { useTheme } from '../../../util/theme';
-import { isQRHardwareAccount } from '../../../util/address';
+import {
+  getAddressAccountType,
+  isHardwareAccount,
+} from '../../../util/address';
 import {
   selectChainId,
   selectTicker,
@@ -90,6 +93,11 @@ import { selectAccounts } from '../../../selectors/accountTrackerController';
 import { selectContractBalances } from '../../../selectors/tokenBalancesController';
 import { selectSelectedAddress } from '../../../selectors/preferencesController';
 import { resetTransaction, setRecipient } from '../../../actions/transaction';
+import Routes from '../../../constants/navigation/Routes';
+import {
+  SWAP_QUOTE_SUMMARY,
+  SWAP_GAS_FEE,
+} from '../../../../wdio/screen-objects/testIDs/Screens/SwapView.js';
 
 const POLLING_INTERVAL = 30000;
 const SLIPPAGE_BUCKETS = {
@@ -348,7 +356,7 @@ async function addTokenToAssetsController(newToken) {
     )
   ) {
     const { address, symbol, decimals, name } = newToken;
-    await TokensController.addToken(address, symbol, decimals, null, name);
+    await TokensController.addToken(address, symbol, decimals, { name });
   }
 }
 
@@ -851,9 +859,10 @@ function SwapsQuotesView({
   );
 
   const startSwapAnalytics = useCallback(
-    (selectedQuote) => {
+    (selectedQuote, selectedAddress) => {
       InteractionManager.runAfterInteractions(() => {
         const parameters = {
+          account_type: getAddressAccountType(selectedAddress),
           token_from: sourceToken.symbol,
           token_from_amount: fromTokenMinimalUnitString(
             sourceAmount,
@@ -921,8 +930,10 @@ function SwapsQuotesView({
             ),
             gas: new BigNumber(gasLimit).toString(16),
           },
-          process.env.MM_FOX_CODE,
-          WalletDevice.MM_MOBILE,
+          {
+            deviceConfirmedOn: WalletDevice.MM_MOBILE,
+            origin: process.env.MM_FOX_CODE,
+          },
         );
         updateSwapsTransactions(
           transactionMeta,
@@ -955,7 +966,7 @@ function SwapsQuotesView({
       TransactionController,
       newSwapsTransactions,
       approvalTransactionMetaId,
-      isHardwareAccount,
+      isHardwareAddress,
     ) => {
       try {
         resetTransaction();
@@ -967,8 +978,10 @@ function SwapsQuotesView({
               gasEstimates,
             ),
           },
-          process.env.MM_FOX_CODE,
-          WalletDevice.MM_MOBILE,
+          {
+            deviceConfirmedOn: WalletDevice.MM_MOBILE,
+            origin: process.env.MM_FOX_CODE,
+          },
         );
 
         setRecipient(selectedAddress);
@@ -986,7 +999,7 @@ function SwapsQuotesView({
             16,
           ).toString(10),
         };
-        if (isHardwareAccount) {
+        if (isHardwareAddress) {
           TransactionController.hub.once(
             `${transactionMeta.id}:finished`,
             (transactionMeta) => {
@@ -995,7 +1008,7 @@ function SwapsQuotesView({
                   TransactionController,
                   newSwapsTransactions,
                   approvalTransactionMetaId,
-                  isHardwareAccount,
+                  isHardwareAddress,
                 );
               }
             },
@@ -1023,9 +1036,9 @@ function SwapsQuotesView({
       return;
     }
 
-    const isHardwareAccount = isQRHardwareAccount(selectedAddress);
+    const isHardwareAddress = isHardwareAccount(selectedAddress);
 
-    startSwapAnalytics(selectedQuote);
+    startSwapAnalytics(selectedQuote, selectedAddress);
 
     const { TransactionController } = Engine.context;
     const newSwapsTransactions =
@@ -1037,10 +1050,10 @@ function SwapsQuotesView({
         TransactionController,
         newSwapsTransactions,
         approvalTransactionMetaId,
-        isHardwareAccount,
+        isHardwareAddress,
       );
 
-      if (isHardwareAccount) {
+      if (isHardwareAddress) {
         navigation.dangerouslyGetParent()?.pop();
         return;
       }
@@ -1050,7 +1063,7 @@ function SwapsQuotesView({
       TransactionController,
       newSwapsTransactions,
       approvalTransactionMetaId,
-      isHardwareAccount,
+      isHardwareAddress,
     );
 
     navigation.dangerouslyGetParent()?.pop();
@@ -1314,7 +1327,7 @@ function SwapsQuotesView({
 
   const buyEth = useCallback(() => {
     try {
-      navigation.navigate('FiatOnRampAggregator');
+      navigation.navigate(Routes.RAMP.BUY);
     } catch (error) {
       Logger.error(error, 'Navigation: Error when navigating to buy ETH.');
     }
@@ -1619,7 +1632,9 @@ function SwapsQuotesView({
     }
     const getEstimatedL1ApprovalFee = async () => {
       try {
-        const eth = new Eth(Engine.context.NetworkController.provider);
+        const eth = new Eth(
+          Engine.context.NetworkController.getProviderAndBlockTracker().provider,
+        );
         let l1ApprovalFeeTotal = '0x0';
         if (approvalTransaction) {
           l1ApprovalFeeTotal = await fetchEstimatedMultiLayerL1Fee(eth, {
@@ -1926,9 +1941,9 @@ function SwapsQuotesView({
               savings={isSaving}
             >
               <QuotesSummary.HeaderText style={styles.bestQuoteText} bold>
-                {isSaving
-                  ? strings('swaps.savings')
-                  : strings('swaps.using_best_quote')}
+                {`${strings('swaps.n_quotes', {
+                  numberOfQuotes: allQuotes.length,
+                })} `}
               </QuotesSummary.HeaderText>
               {allQuotes.length > 1 && (
                 <TouchableOpacity
@@ -1942,13 +1957,14 @@ function SwapsQuotesView({
               )}
             </QuotesSummary.Header>
             <QuotesSummary.Body>
-              <View style={styles.quotesRow}>
+              <View style={styles.quotesRow} testID={SWAP_QUOTE_SUMMARY}>
                 <View style={styles.quotesDescription}>
                   <View style={styles.quotesLegend}>
                     <Text primary bold>
                       {strings('swaps.estimated_gas_fee')}
                     </Text>
                     <TouchableOpacity
+                      testID={SWAP_GAS_FEE}
                       style={styles.gasInfoContainer}
                       onPress={showGasTooltip}
                       hitSlop={styles.hitSlop}
@@ -2202,10 +2218,6 @@ function SwapsQuotesView({
         title={strings('swaps.metamask_swap_fee')}
         body={
           <Text style={styles.text}>
-            {strings('swaps.fee_text.get_the')}{' '}
-            <Text bold>{strings('swaps.fee_text.best_price')}</Text>{' '}
-            {strings('swaps.fee_text.from_the')}{' '}
-            <Text bold>{strings('swaps.fee_text.top_liquidity')}</Text>{' '}
             {selectedQuote && selectedQuote?.fee > 0
               ? strings('swaps.fee_text.fee_is_applied', {
                   fee: `${selectedQuote.fee}%`,

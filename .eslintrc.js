@@ -19,6 +19,16 @@ module.exports = {
       rules: {
         // TODO: re-enable
         'jsdoc/no-types': 'off',
+        // This change is included in `@metamask/eslint-config-typescript@10.0.0
+        '@typescript-eslint/no-unused-vars': [
+          'error',
+          {
+            vars: 'all',
+            args: 'all',
+            argsIgnorePattern: '[_]+',
+            ignoreRestSiblings: true, // this line is what has changed
+          },
+        ],
       },
     },
     {
@@ -88,7 +98,7 @@ module.exports = {
     'import/no-amd': 2,
     'import/no-commonjs': 2,
     'import/no-duplicates': 2,
-    'import/no-extraneous-dependencies': 2,
+    'import/no-extraneous-dependencies': ['error', { packageDir: ['./'] }],
     'import/no-mutable-exports': 2,
     'import/no-namespace': 2,
     'import/no-nodejs-modules': 2,

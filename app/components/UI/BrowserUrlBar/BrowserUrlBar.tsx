@@ -1,5 +1,5 @@
 import React from 'react';
-import { Platform, TouchableOpacity, View } from 'react-native';
+import { TouchableOpacity, View } from 'react-native';
 
 import { useStyles } from '../../../component-library/hooks';
 import { getURLProtocol } from '../../../util/general';
@@ -14,9 +14,9 @@ import Text from '../../../component-library/components/Texts/Text';
 
 import { BrowserUrlBarProps } from './BrowserUrlBar.types';
 import stylesheet from './BrowserUrlBar.styles';
-import generateTestId from '../../../../wdio/utils/generateTestId';
-import { NAVBAR_TITLE_NETWORK } from '../../../../wdio/screen-objects/testIDs/BrowserScreen/BrowserScreen.testIds';
+import { BrowserViewSelectorsIDs } from '../../../../e2e/selectors/BrowserView.selectors';
 import Url from 'url-parse';
+import { regex } from '../../../../app/util/regex';
 
 const BrowserUrlBar = ({ url, route, onPress }: BrowserUrlBarProps) => {
   const getDappMainUrl = () => {
@@ -30,9 +30,9 @@ const BrowserUrlBar = ({ url, route, onPress }: BrowserUrlBarProps) => {
       url.search(`${AppConstants.IPFS_OVERRIDE_PARAM}=false`) === -1 &&
       Boolean(ensUrl)
     ) {
-      return ensUrl.toLowerCase().replace(/^www\./, '');
+      return ensUrl.toLowerCase().replace(regex.startUrl, '');
     }
-    return urlObj.host.toLowerCase().replace(/^www\./, '');
+    return urlObj.host.toLowerCase().replace(regex.startUrl, '');
   };
 
   const contentProtocol = getURLProtocol(url);
@@ -46,10 +46,7 @@ const BrowserUrlBar = ({ url, route, onPress }: BrowserUrlBarProps) => {
 
   return (
     <TouchableOpacity onPress={onPress}>
-      <View
-        style={styles.main}
-        {...generateTestId(Platform, NAVBAR_TITLE_NETWORK)}
-      >
+      <View style={styles.main} testID={BrowserViewSelectorsIDs.URL_INPUT}>
         <Icon
           color={theme.colors.icon.alternative}
           name={secureConnectionIcon}

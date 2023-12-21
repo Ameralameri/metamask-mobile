@@ -1,5 +1,9 @@
 import { Order } from '@consensys/on-ramp-sdk';
-import { AggregatorNetwork } from '@consensys/on-ramp-sdk/dist/API';
+import {
+  AggregatorNetwork,
+  OrderOrderTypeEnum,
+} from '@consensys/on-ramp-sdk/dist/API';
+import { merge } from 'lodash';
 import fiatOrderReducer, {
   addActivationKey,
   addAuthenticationUrl,
@@ -26,6 +30,7 @@ import fiatOrderReducer, {
   resetFiatOrders,
   selectedAddressSelector,
   setFiatOrdersGetStartedAGG,
+  setFiatOrdersGetStartedSell,
   setFiatOrdersPaymentMethodAGG,
   setFiatOrdersRegionAGG,
   updateActivationKey,
@@ -33,9 +38,13 @@ import fiatOrderReducer, {
   updateFiatOrder,
   updateOnRampNetworks,
   networkShortNameSelector,
+  fiatOrdersGetStartedSell,
+  setFiatSellTxHash,
+  removeFiatSellTxHash,
 } from '.';
 import { FIAT_ORDER_PROVIDERS } from '../../constants/on-ramp';
 import { CustomIdData, Action, FiatOrder, Region } from './types';
+import initialRootState from '../../util/test/initial-root-state';
 
 const mockOrder1 = {
   id: 'test-id-1',
@@ -53,7 +62,7 @@ const mockOrder1 = {
   network: '1',
   txHash: '0x987654321',
   excludeFromPurchases: false,
-  orderType: 'BUY',
+  orderType: OrderOrderTypeEnum.Buy,
   errorCount: 0,
   lastTimeFetched: 0,
   data: {
@@ -92,6 +101,7 @@ const dummyCustomOrderIdData1: CustomIdData = {
   id: '123',
   chainId: '1',
   account: '0x123',
+  orderType: 'BUY',
   createdAt: 123,
   lastTimeFetched: 123,
   errorCount: 0,
@@ -101,6 +111,7 @@ const dummyCustomOrderIdData2: CustomIdData = {
   id: '456',
   chainId: '1',
   account: '0x123',
+  orderType: 'BUY',
   createdAt: 123,
   lastTimeFetched: 123,
   errorCount: 0,
@@ -109,6 +120,7 @@ const dummyCustomOrderIdData3: CustomIdData = {
   id: '789',
   chainId: '1',
   account: '0x123',
+  orderType: 'BUY',
   createdAt: 123,
   lastTimeFetched: 123,
   errorCount: 0,
@@ -299,6 +311,19 @@ describe('fiatOrderReducer', () => {
     );
     expect(stateWithStartedTrue.getStartedAgg).toEqual(true);
     expect(stateWithStartedFalse.getStartedAgg).toEqual(false);
+  });
+
+  it('should set get started sell', () => {
+    const stateWithStartedTrue = fiatOrderReducer(
+      initialState,
+      setFiatOrdersGetStartedSell(true),
+    );
+    const stateWithStartedFalse = fiatOrderReducer(
+      stateWithStartedTrue,
+      setFiatOrdersGetStartedSell(false),
+    );
+    expect(stateWithStartedTrue.getStartedSell).toEqual(true);
+    expect(stateWithStartedFalse.getStartedSell).toEqual(false);
   });
 
   it('should set the selected region', () => {
@@ -567,12 +592,68 @@ describe('fiatOrderReducer', () => {
     expect(stateWithNetworks.networks).toEqual(networks);
     expect(stateWithNoNetworks.networks).toEqual([]);
   });
+
+  it('should set the sell tx hash', () => {
+    const stateWithOrder1 = fiatOrderReducer(
+      initialState,
+      addFiatOrder(mockOrder1),
+    );
+    const stateWithSellTxHash = fiatOrderReducer(
+      stateWithOrder1,
+      setFiatSellTxHash(mockOrder1.id, '0x123'),
+    );
+
+    expect(stateWithSellTxHash.orders[0].sellTxHash).toEqual('0x123');
+  });
+
+  it('should return same state when setting the sell tx hash if order does not exist', () => {
+    const stateWithOrder1 = fiatOrderReducer(
+      initialState,
+      addFiatOrder(mockOrder1),
+    );
+    const stateWithoutChanges = fiatOrderReducer(
+      stateWithOrder1,
+      setFiatSellTxHash('non-existing-order', '0x123'),
+    );
+
+    expect(stateWithoutChanges).toEqual(stateWithOrder1);
+  });
+
+  it('should remove the sell tx hash', () => {
+    const stateWithOrder1 = fiatOrderReducer(
+      initialState,
+      addFiatOrder(mockOrder1),
+    );
+    const stateWithSellTxHash = fiatOrderReducer(
+      stateWithOrder1,
+      setFiatSellTxHash(mockOrder1.id, '0x123'),
+    );
+    const stateWithoutSellTxHash = fiatOrderReducer(
+      stateWithSellTxHash,
+      removeFiatSellTxHash(mockOrder1.id),
+    );
+
+    expect(stateWithoutSellTxHash.orders[0].sellTxHash).not.toBeDefined();
+  });
+
+  it('should return same state when removing the sell tx hash if order does not exist', () => {
+    const stateWithOrder1 = fiatOrderReducer(
+      initialState,
+      addFiatOrder(mockOrder1),
+    );
+    const stateWithoutChanges = fiatOrderReducer(
+      stateWithOrder1,
+      removeFiatSellTxHash('non-existing-order'),
+    );
+
+    expect(stateWithoutChanges).toEqual(stateWithOrder1);
+  });
 });
 
 describe('selectors', () => {
   describe('chainIdSelector', () => {
     it('should return the chainId', () => {
-      const state = {
+      const state = merge({}, initialRootState, {
         engine: {
           backgroundState: {
             NetworkController: {
@@ -582,7 +663,7 @@ describe('selectors', () => {
             },
           },
         },
-      };
+      });
 
       expect(chainIdSelector(state)).toBe('56');
     });
@@ -590,7 +671,7 @@ describe('selectors', () => {
 
   describe('selectedAddressSelector', () => {
     it('should return the selected address', () => {
-      const state = {
+      const state = merge({}, initialRootState, {
         engine: {
           backgroundState: {
             PreferencesController: {
@@ -598,7 +679,7 @@ describe('selectors', () => {
             },
           },
         },
-      };
+      });
 
       expect(selectedAddressSelector(state)).toBe('0x12345678');
     });
@@ -606,15 +687,14 @@ describe('selectors', () => {
 
   describe('fiatOrdersRegionSelectorAgg', () => {
     it('should return the selected region', () => {
-      const state = {
+      const state = merge({}, initialRootState, {
         fiatOrders: {
-          ...initialState,
           selectedRegionAgg: {
             id: '/region/cl',
             name: 'Chile',
           },
         },
-      };
+      });
 
       expect(fiatOrdersRegionSelectorAgg(state)).toEqual({
         id: '/region/cl',
@@ -625,12 +705,11 @@ describe('selectors', () => {
 
   describe('fiatOrdersPaymentMethodSelectorAgg', () => {
     it('should return the selected payment method id', () => {
-      const state = {
+      const state = merge({}, initialRootState, {
         fiatOrders: {
-          ...initialState,
           selectedPaymentMethodAgg: '/payment-method/test-payment-method',
         },
-      };
+      });
 
       expect(fiatOrdersPaymentMethodSelectorAgg(state)).toEqual(
         '/payment-method/test-payment-method',
@@ -640,20 +719,41 @@ describe('selectors', () => {
 
   describe('fiatOrdersGetStartedAgg', () => {
     it('should return the get started state', () => {
-      const state = {
+      const state = merge({}, initialRootState, {
         fiatOrders: {
-          ...initialState,
           getStartedAgg: true,
         },
-      };
+      });
 
       expect(fiatOrdersGetStartedAgg(state)).toEqual(true);
     });
   });
 
+  describe('fiatOrdersGetStartedSell', () => {
+    it('should return the get started sell state', () => {
+      const state = merge({}, initialRootState, {
+        fiatOrders: {
+          getStartedSell: true,
+        },
+      });
+
+      expect(fiatOrdersGetStartedSell(state)).toEqual(true);
+    });
+  });
+
   describe('getOrders', () => {
+    it('should return empty array if order property is not defined', () => {
+      const state = merge({}, initialRootState, {
+        fiatOrders: {
+          orders: undefined,
+        },
+      });
+
+      expect(getOrders(state)).toEqual([]);
+    });
+
     it('should return the orders by address and chainId', () => {
-      const state1 = {
+      const state1 = merge({}, initialRootState, {
         engine: {
           backgroundState: {
             NetworkController: {
@@ -667,7 +767,6 @@ describe('selectors', () => {
           },
         },
         fiatOrders: {
-          ...initialState,
           orders: [
             {
               ...mockOrder1,
@@ -701,15 +800,15 @@ describe('selectors', () => {
             },
             {
               ...mockOrder1,
-              id: 'test-56-order-3',
+              id: 'test-1-order-3',
               network: '1',
               account: '0x4567',
             },
           ],
         },
-      };
+      });
 
-      const state2 = {
+      const state2 = merge({}, initialRootState, {
         engine: {
           backgroundState: {
             NetworkController: {
@@ -723,7 +822,6 @@ describe('selectors', () => {
           },
         },
         fiatOrders: {
-          ...initialState,
           orders: [
             {
               ...mockOrder1,
@@ -764,13 +862,13 @@ describe('selectors', () => {
             },
             {
               ...mockOrder1,
-              id: 'test-56-order-3',
+              id: 'test-1-order-3',
               network: '1',
               account: '0x4567',
             },
           ],
         },
-      };
+      });
 
       expect(getOrders(state1)).toHaveLength(2);
       expect(getOrders(state1).map((o) => o.id)).toEqual([
@@ -781,8 +879,140 @@ describe('selectors', () => {
       expect(getOrders(state2).map((o) => o.id)).toEqual(['test-1-order-2']);
     });
 
+    it('should return all the orders in a test net', () => {
+      const state1 = merge({}, initialRootState, {
+        engine: {
+          backgroundState: {
+            NetworkController: {
+              providerConfig: {
+                chainId: '11155111',
+              },
+            },
+            PreferencesController: {
+              selectedAddress: '0x4567',
+            },
+          },
+        },
+        fiatOrders: {
+          orders: [
+            {
+              ...mockOrder1,
+              id: 'test-56-order-1',
+              network: '56',
+              account: '0x4567',
+            },
+            {
+              ...mockOrder1,
+              id: 'test-56-order-2',
+              network: '56',
+              account: '0x1234',
+            },
+            {
+              ...mockOrder1,
+              id: 'test-56-order-3',
+              network: '56',
+              account: '0x4567',
+            },
+            {
+              ...mockOrder1,
+              id: 'test-1-order-1',
+              network: '1',
+              account: '0x4567',
+            },
+            {
+              ...mockOrder1,
+              id: 'test-1-order-2',
+              network: '1',
+              account: '0x1234',
+            },
+            {
+              ...mockOrder1,
+              id: 'test-1-order-3',
+              network: '1',
+              account: '0x4567',
+            },
+          ],
+        },
+      });
+
+      const state2 = merge({}, initialRootState, {
+        engine: {
+          backgroundState: {
+            NetworkController: {
+              providerConfig: {
+                chainId: '11155111',
+              },
+            },
+            PreferencesController: {
+              selectedAddress: '0x1234',
+            },
+          },
+        },
+        fiatOrders: {
+          orders: [
+            {
+              ...mockOrder1,
+              id: 'test-56-order-1',
+              network: '56',
+              account: '0x4567',
+            },
+            {
+              ...mockOrder1,
+              id: 'test-56-order-2',
+              network: '56',
+              account: '0x1234',
+            },
+            {
+              ...mockOrder1,
+              id: 'test-56-order-3',
+              network: '56',
+              account: '0x4567',
+            },
+            {
+              ...mockOrder1,
+              id: 'test-1-order-1',
+              network: '1',
+              account: '0x4567',
+            },
+            {
+              ...mockOrder1,
+              id: 'test-1-order-2',
+              network: '1',
+              account: '0x1234',
+            },
+            {
+              ...mockOrder1,
+              id: 'test-1-order-3',
+              network: '1',
+              excludeFromPurchases: true,
+              account: '0x1234',
+            },
+            {
+              ...mockOrder1,
+              id: 'test-1-order-3',
+              network: '1',
+              account: '0x4567',
+            },
+          ],
+        },
+      });
+
+      expect(getOrders(state1)).toHaveLength(4);
+      expect(getOrders(state1).map((o) => o.id)).toEqual([
+        'test-56-order-1',
+        'test-56-order-3',
+        'test-1-order-1',
+        'test-1-order-3',
+      ]);
+      expect(getOrders(state2)).toHaveLength(2);
+      expect(getOrders(state2).map((o) => o.id)).toEqual([
+        'test-56-order-2',
+        'test-1-order-2',
+      ]);
+    });
+
     it('it should return empty array by default', () => {
-      const state = {
+      const state = merge({}, initialRootState, {
         engine: {
           backgroundState: {
             NetworkController: {
@@ -796,7 +1026,7 @@ describe('selectors', () => {
           },
         },
         fiatOrders: {},
-      };
+      });
 
       expect(getOrders(state)).toEqual([]);
     });
@@ -804,7 +1034,7 @@ describe('selectors', () => {
 
   describe('getPendingOrders', () => {
     it('should return the orders by address and chainId and state pending', () => {
-      const state1 = {
+      const state1 = merge({}, initialRootState, {
         engine: {
           backgroundState: {
             NetworkController: {
@@ -818,7 +1048,6 @@ describe('selectors', () => {
           },
         },
         fiatOrders: {
-          ...initialState,
           orders: [
             {
               ...mockOrder1,
@@ -860,9 +1089,9 @@ describe('selectors', () => {
             },
           ],
         },
-      };
+      });
 
-      const state2 = {
+      const state2 = merge({}, initialRootState, {
         engine: {
           backgroundState: {
             NetworkController: {
@@ -876,7 +1105,6 @@ describe('selectors', () => {
           },
         },
         fiatOrders: {
-          ...initialState,
           orders: [
             {
               ...mockOrder1,
@@ -924,7 +1152,7 @@ describe('selectors', () => {
             },
           ],
         },
-      };
+      });
 
       expect(getPendingOrders(state1)).toHaveLength(2);
       expect(getPendingOrders(state1).map((o) => o.id)).toEqual([
@@ -938,7 +1166,7 @@ describe('selectors', () => {
     });
 
     it('it should return empty array by default', () => {
-      const state = {
+      const state = merge({}, initialRootState, {
         engine: {
           backgroundState: {
             NetworkController: {
@@ -952,15 +1180,25 @@ describe('selectors', () => {
           },
         },
         fiatOrders: {},
-      };
+      });
 
       expect(getPendingOrders(state)).toEqual([]);
     });
   });
 
   describe('customOrdersSelector', () => {
+    it('should return empty array if custom order property is not defined', () => {
+      const state = merge({}, initialRootState, {
+        fiatOrders: {
+          customOrderIds: undefined,
+        },
+      });
+
+      expect(getCustomOrderIds(state)).toEqual([]);
+    });
+
     it('should return the custom order ids by address and chainId', () => {
-      const state = {
+      const state = merge({}, initialRootState, {
         engine: {
           backgroundState: {
             NetworkController: {
@@ -974,7 +1212,6 @@ describe('selectors', () => {
           },
         },
         fiatOrders: {
-          ...initialState,
           customOrderIds: [
             {
               id: 'test-56-order-1',
@@ -998,7 +1235,7 @@ describe('selectors', () => {
             },
           ],
         },
-      };
+      });
 
       expect(getCustomOrderIds(state)).toHaveLength(2);
       expect(getCustomOrderIds(state).map((c) => c.id)).toEqual([
@@ -1008,7 +1245,7 @@ describe('selectors', () => {
     });
 
     it('it should return empty array by default', () => {
-      const state = {
+      const state = merge({}, initialRootState, {
         engine: {
           backgroundState: {
             NetworkController: {
@@ -1022,7 +1259,7 @@ describe('selectors', () => {
           },
         },
         fiatOrders: {},
-      };
+      });
 
       expect(getCustomOrderIds(state)).toEqual([]);
     });
@@ -1030,7 +1267,7 @@ describe('selectors', () => {
 
   describe('getOrderById', () => {
     it('should make selector and return the correct order id', () => {
-      const state = {
+      const state = merge({}, initialRootState, {
         engine: {
           backgroundState: {
             NetworkController: {
@@ -1044,7 +1281,6 @@ describe('selectors', () => {
           },
         },
         fiatOrders: {
-          ...initialState,
           orders: [
             {
               ...mockOrder1,
@@ -1092,7 +1328,7 @@ describe('selectors', () => {
             },
           ],
         },
-      };
+      });
       const order = getOrderById(state, 'test-56-order-2');
       expect(order?.id).toBe('test-56-order-2');
     });
@@ -1100,7 +1336,7 @@ describe('selectors', () => {
 
   describe('getHasOrders', () => {
     it('should return true only if there are orders', () => {
-      const state1 = {
+      const state1 = merge({}, initialRootState, {
         engine: {
           backgroundState: {
             NetworkController: {
@@ -1114,7 +1350,6 @@ describe('selectors', () => {
           },
         },
         fiatOrders: {
-          ...initialState,
           orders: [
             {
               ...mockOrder1,
@@ -1162,8 +1397,8 @@ describe('selectors', () => {
             },
           ],
         },
-      };
-      const state2 = {
+      });
+      const state2 = merge({}, initialRootState, {
         engine: {
           backgroundState: {
             NetworkController: {
@@ -1177,7 +1412,6 @@ describe('selectors', () => {
           },
         },
         fiatOrders: {
-          ...initialState,
           orders: [
             {
               ...mockOrder1,
@@ -1225,82 +1459,96 @@ describe('selectors', () => {
             },
           ],
         },
-      };
+      });
       expect(getHasOrders(state1)).toBe(true);
       expect(getHasOrders(state2)).toBe(false);
     });
   });
 
   describe('getActivationKeys', () => {
-    it('should return activation keys', () => {
-      const state = {
+    it('should return empty array if activation keys property is not defined', () => {
+      const state = merge({}, initialRootState, {
         fiatOrders: {
-          ...initialState,
+          activationKeys: undefined,
+        },
+      });
+      expect(getActivationKeys(state)).toStrictEqual([]);
+    });
+
+    it('should return activation keys', () => {
+      const state = merge({}, initialRootState, {
+        fiatOrders: {
           activationKeys: [
             { key: 'test-activation-key-1', active: true },
             { key: 'test-activation-key-2', active: false },
           ],
         },
-      };
+      });
       expect(getActivationKeys(state)).toStrictEqual([
         { key: 'test-activation-key-1', active: true },
         { key: 'test-activation-key-2', active: false },
       ]);
     });
     it('should return empty array by default', () => {
-      const state = {
+      const state = merge({}, initialRootState, {
         fiatOrders: {},
-      };
+      });
       expect(getActivationKeys(state)).toStrictEqual([]);
     });
   });
 
   describe('getAuthenticationUrls', () => {
-    it('should return authentication urls', () => {
-      const state = {
+    it('should return empty array if authentication urls property is not defined', () => {
+      const state = merge({}, initialRootState, {
         fiatOrders: {
-          ...initialState,
+          authenticationUrls: undefined,
+        },
+      });
+      expect(getAuthenticationUrls(state)).toStrictEqual([]);
+    });
+
+    it('should return authentication urls', () => {
+      const state = merge({}, initialRootState, {
+        fiatOrders: {
           authenticationUrls: [
             'test-authentication-url-1',
             'test-authentication-url-2',
           ],
         },
-      };
+      });
       expect(getAuthenticationUrls(state)).toStrictEqual([
         'test-authentication-url-1',
         'test-authentication-url-2',
       ]);
     });
     it('should return empty array by default', () => {
-      const state = {
+      const state = merge({}, initialRootState, {
         fiatOrders: {},
-      };
+      });
       expect(getAuthenticationUrls(state)).toStrictEqual([]);
     });
   });
 
   describe('getRampNetworks', () => {
     it('should return the correct ramp networks', () => {
-      const state = {
+      const state = merge({}, initialRootState, {
         fiatOrders: {
-          ...initialState,
           networks,
         },
-      };
-      const otherState = {
+      });
+      const otherState = merge({}, initialRootState, {
         fiatOrders: {
-          ...initialState,
-          networks: networks[1],
+          networks: [networks[1]],
         },
-      };
+      });
       expect(getRampNetworks(state)).toStrictEqual(networks);
-      expect(getRampNetworks(otherState)).toStrictEqual(networks[1]);
+      expect(getRampNetworks(otherState)).toStrictEqual([networks[1]]);
     });
   });
 
   describe('networkNameSelector', () => {
     it('should return the correct network name', () => {
-      const mainnetState = {
+      const mainnetState = merge({}, initialRootState, {
         engine: {
           backgroundState: {
             NetworkController: {
@@ -1311,12 +1559,11 @@ describe('selectors', () => {
           },
         },
         fiatOrders: {
-          ...initialState,
           networks,
         },
-      };
+      });
 
-      const auroraState = {
+      const auroraState = merge({}, initialRootState, {
         engine: {
           backgroundState: {
             NetworkController: {
@@ -1327,12 +1574,11 @@ describe('selectors', () => {
           },
         },
         fiatOrders: {
-          ...initialState,
           networks,
         },
-      };
+      });
 
-      const missingNetworkState = {
+      const missingNetworkState = merge({}, initialRootState, {
         engine: {
           backgroundState: {
             NetworkController: {
@@ -1343,10 +1589,9 @@ describe('selectors', () => {
           },
         },
         fiatOrders: {
-          ...initialState,
           networks,
         },
-      };
+      });
 
       expect(networkShortNameSelector(mainnetState)).toEqual('Ethereum');
       expect(networkShortNameSelector(auroraState)).toEqual('Aurora');

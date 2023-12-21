@@ -5,13 +5,15 @@ import { BIOMETRY_TYPE } from 'react-native-keychain';
 import { Authentication } from '../../../../../core';
 import AUTHENTICATION_TYPE from '../../../../../constants/userProperties';
 import Device from '../../../../../util/device';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '../../../../../store/async-storage-wrapper';
 import {
   BIOMETRY_CHOICE_DISABLED,
   PASSCODE_DISABLED,
   TRUE,
 } from '../../../../../constants/storage';
 import { View } from 'react-native';
+import { LOGIN_OPTIONS } from '../SecuritySettings.constants';
+import { SecurityPrivacyViewSelectorsIDs } from '../../../../../../e2e/selectors/Settings/SecurityAndPrivacy/SecurityPrivacyView.selectors';
 
 interface BiometricOptionSectionProps {
   onSignWithBiometricsOptionUpdated: (enabled: boolean) => Promise<void>;
@@ -76,13 +78,13 @@ const LoginOptionsSettings = ({
   );
 
   return (
-    <View>
+    <View testID={LOGIN_OPTIONS}>
       {biometryType ? (
         <SecurityOptionToggle
           title={strings(`biometrics.enable_${biometryType.toLowerCase()}`)}
           value={biometryChoice}
           onOptionUpdated={onBiometricsOptionUpdated}
-          testId={'biometrics-option'}
+          testId={SecurityPrivacyViewSelectorsIDs.BIOMETRICS_TOGGLE}
         />
       ) : null}
       {biometryType && !biometryChoice ? (
@@ -94,7 +96,7 @@ const LoginOptionsSettings = ({
           }
           value={passcodeChoice}
           onOptionUpdated={onPasscodeOptionUpdated}
-          testId={'DevicePasscodeOption'}
+          testId={SecurityPrivacyViewSelectorsIDs.DEVICE_PASSCODE_TOGGLE}
         />
       ) : null}
     </View>

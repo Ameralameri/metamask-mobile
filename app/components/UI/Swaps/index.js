@@ -52,7 +52,6 @@ import {
 } from './utils';
 import { getSwapsAmountNavbar } from '../Navbar';
 
-import Onboarding from './components/Onboarding';
 import useModalHandler from '../../Base/hooks/useModalHandler';
 import Text from '../../Base/Text';
 import Keypad from '../../Base/Keypad';
@@ -71,6 +70,7 @@ import { isZero, gte } from '../../../util/lodash';
 import { useTheme } from '../../../util/theme';
 import {
   selectChainId,
+  selectNetworkConfigurations,
   selectProviderConfig,
 } from '../../../selectors/networkController';
 import {
@@ -80,11 +80,13 @@ import {
 import { selectContractExchangeRates } from '../../../selectors/tokenRatesController';
 import { selectAccounts } from '../../../selectors/accountTrackerController';
 import { selectContractBalances } from '../../../selectors/tokenBalancesController';
+import { selectSelectedAddress } from '../../../selectors/preferencesController';
+import AccountSelector from '../Ramp/common/components/AccountSelector';
 import {
-  selectFrequentRpcList,
-  selectSelectedAddress,
-} from '../../../selectors/preferencesController';
-import AccountSelector from '../Ramp/components/AccountSelector';
+  SWAP_SOURCE_TOKEN,
+  SWAP_DEST_TOKEN,
+  SWAP_MAX_SLIPPAGE,
+} from '../../../../wdio/screen-objects/testIDs/Screens/QuoteView.js';
 
 const createStyles = (colors) =>
   StyleSheet.create({
@@ -186,7 +188,7 @@ function SwapsAmountView({
   selectedAddress,
   chainId,
   providerConfig,
-  frequentRpcList,
+  networkConfigurations,
   balances,
   tokensWithBalance,
   tokensTopAssets,
@@ -204,7 +206,7 @@ function SwapsAmountView({
 
   const previousSelectedAddress = useRef();
 
-  const explorer = useBlockExplorer(providerConfig, frequentRpcList);
+  const explorer = useBlockExplorer(providerConfig, networkConfigurations);
   const initialSource = route.params?.sourceToken ?? SWAPS_NATIVE_ADDRESS;
   const [amount, setAmount] = useState('0');
   const [slippage, setSlippage] = useState(AppConstants.SWAPS.DEFAULT_SLIPPAGE);
@@ -528,7 +530,7 @@ function SwapsAmountView({
     ) {
       const { TokensController } = Engine.context;
       const { address, symbol, decimals, name } = sourceToken;
-      await TokensController.addToken(address, symbol, decimals, null, name);
+      await TokensController.addToken(address, symbol, decimals, { name });
     }
     return navigation.navigate(
       'SwapsQuotesView',
@@ -646,17 +648,6 @@ function SwapsAmountView({
   const disabledView =
     !destinationTokenHasEnoughOcurrances && !hasDismissedTokenAlert;
 
-  if (!userHasOnboarded) {
-    return (
-      <ScreenView
-        style={styles.container}
-        contentContainerStyle={styles.screen}
-      >
-        <Onboarding setHasOnboarded={setHasOnboarded} />
-      </ScreenView>
-    );
-  }
-
   return (
     <ScreenView
       style={styles.container}
@@ -670,6 +661,7 @@ function SwapsAmountView({
         <View
           style={[styles.tokenButtonContainer, disabledView && styles.disabled]}
           pointerEvents={disabledView ? 'none' : 'auto'}
+          testID={SWAP_SOURCE_TOKEN}
         >
           {isInitialLoadingTokens ? (
             <ActivityIndicator size="small" />
@@ -750,7 +742,7 @@ function SwapsAmountView({
           </TouchableOpacity>
           <View style={styles.horizontalRule} />
         </View>
-        <View style={styles.tokenButtonContainer}>
+        <View style={styles.tokenButtonContainer} testID={SWAP_DEST_TOKEN}>
           {isInitialLoadingTokens ? (
             <ActivityIndicator size="small" />
           ) : (
@@ -890,7 +882,7 @@ function SwapsAmountView({
               hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
               disabled={isDirectWrapping}
             >
-              <Text bold link={!isDirectWrapping}>
+              <Text bold link={!isDirectWrapping} testID={SWAP_MAX_SLIPPAGE}>
                 {strings('swaps.max_slippage_amount', {
                   slippage: `${slippage}%`,
                 })}
@@ -992,9 +984,9 @@ SwapsAmountView.propTypes = {
    */
   chainId: PropTypes.string,
   /**
-   * Frequent RPC list from PreferencesController
+   * Network configurations
    */
-  frequentRpcList: PropTypes.array,
+  networkConfigurations: PropTypes.object,
   /**
    * Function to set liveness
    */
@@ -1011,7 +1003,7 @@ const mapStateToProps = (state) => ({
   currentCurrency: selectCurrentCurrency(state),
   tokenExchangeRates: selectContractExchangeRates(state),
   providerConfig: selectProviderConfig(state),
-  frequentRpcList: selectFrequentRpcList(state),
+  networkConfigurations: selectNetworkConfigurations(state),
   chainId: selectChainId(state),
   tokensWithBalance: swapsTokensWithBalanceSelector(state),
   tokensTopAssets: swapsTopAssetsSelector(state),

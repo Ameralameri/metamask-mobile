@@ -48,7 +48,7 @@ import EthereumAddress from '../EthereumAddress';
 import { getEther } from '../../../util/transactions';
 import { newAssetTransaction } from '../../../actions/transaction';
 import { protectWalletModalVisible } from '../../../actions/user';
-import DeeplinkManager from '../../../core/DeeplinkManager';
+import DeeplinkManager from '../../../core/DeeplinkManager/SharedDeeplinkManager';
 import SettingsNotification from '../SettingsNotification';
 import { RPC } from '../../../constants/network';
 import { findRouteNameFromNavigatorState } from '../../../util/general';
@@ -62,9 +62,9 @@ import { collectiblesSelector } from '../../../reducers/collectibles';
 import { getCurrentRoute } from '../../../reducers/navigation';
 import { ScrollView } from 'react-native-gesture-handler';
 import { isZero } from '../../../util/lodash';
-import { KeyringTypes } from '@metamask/keyring-controller';
 import { Authentication } from '../../../core/';
 import { ThemeContext, mockTheme } from '../../../util/theme';
+import { getLabelTextByAddress } from '../../../util/address';
 import {
   onboardNetworkAction,
   networkSwitched,
@@ -74,6 +74,7 @@ import { scale } from 'react-native-size-matters';
 import generateTestId from '../../../../wdio/utils/generateTestId';
 import { DRAWER_VIEW_LOCK_TEXT_ID } from '../../../../wdio/screen-objects/testIDs/Screens/DrawerView.testIds';
 import {
+  selectNetworkConfigurations,
   selectProviderConfig,
   selectTicker,
 } from '../../../selectors/networkController';
@@ -82,7 +83,6 @@ import { selectTokens } from '../../../selectors/tokensController';
 import { selectAccounts } from '../../../selectors/accountTrackerController';
 import { selectContractBalances } from '../../../selectors/tokenBalancesController';
 import {
-  selectFrequentRpcList,
   selectIdentities,
   selectSelectedAddress,
 } from '../../../selectors/preferencesController';
@@ -399,9 +399,9 @@ class DrawerView extends PureComponent {
      */
     ticker: PropTypes.string,
     /**
-     * Frequent RPC list from PreferencesController
+     * Network configurations
      */
-    frequentRpcList: PropTypes.array,
+    networkConfigurations: PropTypes.object,
     /**
      * Array of ERC20 assets
      */
@@ -491,28 +491,14 @@ class DrawerView extends PureComponent {
   }
 
   renderTag() {
-    let tag = null;
     const colors = this.context.colors || mockTheme.colors;
     const styles = createStyles(colors);
-    const { keyrings, selectedAddress } = this.props;
-    const allKeyrings =
-      keyrings && keyrings.length
-        ? keyrings
-        : Engine.context.KeyringController.state.keyrings;
-    for (const keyring of allKeyrings) {
-      if (keyring.accounts.includes(selectedAddress)) {
-        if (keyring.type === KeyringTypes.simple) {
-          tag = strings('accounts.imported');
-        } else if (keyring.type === KeyringTypes.qr) {
-          tag = strings('transaction.hardware');
-        }
-        break;
-      }
-    }
-    return tag ? (
-      <View style={styles.importedWrapper}>
+    const label = getLabelTextByAddress(this.props.selectedAddress);
+
+    return label ? (
+      <View style={[styles.importedWrapper]}>
         <Text numberOfLines={1} style={styles.importedText}>
-          {tag}
+          {strings(label)}
         </Text>
       </View>
     ) : null;
@@ -712,11 +698,12 @@ class DrawerView extends PureComponent {
   };
 
   viewInEtherscan = () => {
-    const { selectedAddress, providerConfig, frequentRpcList } = this.props;
+    const { selectedAddress, providerConfig, networkConfigurations } =
+      this.props;
     if (providerConfig.type === RPC) {
       const blockExplorer = findBlockExplorerForRpc(
         providerConfig.rpcTarget,
-        frequentRpcList,
+        networkConfigurations,
       );
       const url = `${blockExplorer}/address/${selectedAddress}`;
       const title = new URL(blockExplorer).hostname;
@@ -768,12 +755,15 @@ class DrawerView extends PureComponent {
   };
 
   hasBlockExplorer = (providerType) => {
-    const { frequentRpcList } = this.props;
+    const { networkConfigurations } = this.props;
     if (providerType === RPC) {
       const {
         providerConfig: { rpcTarget },
       } = this.props;
-      const blockExplorer = findBlockExplorerForRpc(rpcTarget, frequentRpcList);
+      const blockExplorer = findBlockExplorerForRpc(
+        rpcTarget,
+        networkConfigurations,
+      );
       if (blockExplorer) {
         return true;
       }
@@ -857,11 +847,11 @@ class DrawerView extends PureComponent {
   getSections = () => {
     const {
       providerConfig: { type, rpcTarget },
-      frequentRpcList,
+      networkConfigurations,
     } = this.props;
     let blockExplorer, blockExplorerName;
     if (type === RPC) {
-      blockExplorer = findBlockExplorerForRpc(rpcTarget, frequentRpcList);
+      blockExplorer = findBlockExplorerForRpc(rpcTarget, networkConfigurations);
       blockExplorerName = getBlockExplorerName(blockExplorer);
     }
     return [
@@ -1250,7 +1240,7 @@ const mapStateToProps = (state) => ({
   accounts: selectAccounts(state),
   selectedAddress: selectSelectedAddress(state),
   identities: selectIdentities(state),
-  frequentRpcList: selectFrequentRpcList(state),
+  networkConfigurations: selectNetworkConfigurations(state),
   currentCurrency: selectCurrentCurrency(state),
   keyrings: state.engine.backgroundState.KeyringController.keyrings,
   networkModalVisible: state.modals.networkModalVisible,
@@ -1274,7 +1264,7 @@ const mapDispatchToProps = (dispatch) => ({
   newAssetTransaction: (selectedAsset) =>
     dispatch(newAssetTransaction(selectedAsset)),
   protectWalletModalVisible: () => dispatch(protectWalletModalVisible()),
-  onboardNetworkAction: (network) => dispatch(onboardNetworkAction(network)),
+  onboardNetworkAction: (chainId) => dispatch(onboardNetworkAction(chainId)),
   networkSwitched: ({ networkUrl, networkStatus }) =>
     dispatch(networkSwitched({ networkUrl, networkStatus })),
   toggleInfoNetworkModal: () => dispatch(toggleInfoNetworkModal(false)),

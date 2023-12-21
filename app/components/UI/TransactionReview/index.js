@@ -31,14 +31,18 @@ import {
   renderFromWei,
   fromTokenMinimalUnit,
   isZeroValue,
-  hexToBN,
 } from '../../../util/number';
 import { safeToChecksumAddress } from '../../../util/address';
 import Device from '../../../util/device';
+import {
+  isBlockaidFeatureEnabled,
+  getBlockaidMetricsParams,
+} from '../../../util/blockaid';
 import TransactionReviewInformation from './TransactionReviewInformation';
 import TransactionReviewSummary from './TransactionReviewSummary';
 import TransactionReviewData from './TransactionReviewData';
 import Analytics from '../../../core/Analytics/Analytics';
+import AnalyticsV2 from '../../../util/analyticsV2';
 import { MetaMetricsEvents } from '../../../core/Analytics';
 import TransactionHeader from '../TransactionHeader';
 import AccountFromToInfoCard from '../AccountFromToInfoCard';
@@ -59,9 +63,9 @@ import {
 import { selectTokenList } from '../../../selectors/tokenListController';
 import { selectTokens } from '../../../selectors/tokensController';
 import { selectContractExchangeRates } from '../../../selectors/tokenRatesController';
-import { selectAccounts } from '../../../selectors/accountTrackerController';
 import ApproveTransactionHeader from '../ApproveTransactionHeader';
 import AppConstants from '../../../core/AppConstants';
+import TransactionBlockaidBanner from '../TransactionBlockaidBanner/TransactionBlockaidBanner';
 
 const POLLING_INTERVAL_ESTIMATED_L1_FEE = 30000;
 
@@ -83,10 +87,10 @@ const createStyles = (colors) =>
       ...fontStyles.bold,
     },
     actionViewWrapper: {
-      height: Device.isMediumDevice() ? 170 : 290,
+      height: Device.isMediumDevice() ? 470 : 550,
     },
     actionViewChildren: {
-      height: 220,
+      height: Device.isMediumDevice() ? 390 : 470,
     },
     accountTransactionWrapper: {
       flex: 1,
@@ -110,6 +114,11 @@ const createStyles = (colors) =>
       marginTop: -24,
       marginBottom: 24,
     },
+    blockaidWarning: {
+      marginBottom: 10,
+      marginTop: 20,
+      marginHorizontal: 10,
+    },
   });
 
 /**
@@ -117,10 +126,6 @@ const createStyles = (colors) =>
  */
 class TransactionReview extends PureComponent {
   static propTypes = {
-    /**
-     * Balance of all the accounts
-     */
-    accounts: PropTypes.object,
     /**
      * Callback triggered when this transaction is cancelled
      */
@@ -145,10 +150,6 @@ class TransactionReview extends PureComponent {
      * Transaction object associated with this transaction
      */
     transaction: PropTypes.object,
-    /**
-     * Callback to validate transaction in parent state
-     */
-    validate: PropTypes.func,
     /**
      * Browser/tab information
      */
@@ -181,6 +182,10 @@ class TransactionReview extends PureComponent {
      * ETH or fiat, depending on user setting
      */
     primaryCurrency: PropTypes.string,
+    /**
+     * Error blockaid transaction execution, undefined value signifies no error.
+     */
+    error: PropTypes.oneOfType([PropTypes.string, PropTypes.bool]),
     /**
      * Whether or not basic gas estimates have been fetched
      */
@@ -254,12 +259,10 @@ class TransactionReview extends PureComponent {
     actionKey: strings('transactions.tx_review_confirm'),
     showHexData: false,
     dataVisible: false,
-    error: undefined,
     assetAmount: undefined,
     conversionRate: undefined,
     fiatValue: undefined,
     multiLayerL1FeeTotal: '0x0',
-    senderBalanceIsZero: true,
   };
 
   fetchEstimatedL1Fee = async () => {
@@ -268,7 +271,9 @@ class TransactionReview extends PureComponent {
       return;
     }
     try {
-      const eth = new Eth(Engine.context.NetworkController.provider);
+      const eth = new Eth(
+        Engine.context.NetworkController.getProviderAndBlockTracker().provider,
+      );
       const result = await fetchEstimatedMultiLayerL1Fee(eth, {
         txParams: transaction.transaction,
         chainId,
@@ -286,14 +291,11 @@ class TransactionReview extends PureComponent {
 
   componentDidMount = async () => {
     const {
-      accounts,
-      validate,
       transaction,
-      transaction: { data, to, value, from },
+      transaction: { data, to, value },
       tokens,
       chainId,
       tokenList,
-      ready,
     } = this.props;
     let { showHexData } = this.props;
     let assetAmount, conversionRate, fiatValue;
@@ -302,7 +304,6 @@ class TransactionReview extends PureComponent {
       data &&
       data.substr(0, 10) === APPROVE_FUNCTION_SIGNATURE &&
       (!value || isZeroValue(value));
-    const error = ready && validate && (await validate());
     const actionKey = await getTransactionReviewActionKey(transaction, chainId);
     if (approveTransaction) {
       let contract = tokenList[safeToChecksumAddress(to)];
@@ -316,20 +317,17 @@ class TransactionReview extends PureComponent {
     } else {
       [assetAmount, conversionRate, fiatValue] = this.getRenderValues()();
     }
-    const senderBalance = accounts[safeToChecksumAddress(from)]?.balance;
-    const senderBalanceIsZero = hexToBN(senderBalance).isZero();
+
     this.setState({
-      error,
       actionKey,
       showHexData,
       assetAmount,
       conversionRate,
       fiatValue,
       approveTransaction,
-      senderBalanceIsZero,
     });
     InteractionManager.runAfterInteractions(() => {
-      Analytics.trackEvent(MetaMetricsEvents.TRANSACTIONS_CONFIRM_STARTED);
+      AnalyticsV2.trackEvent(MetaMetricsEvents.TRANSACTIONS_CONFIRM_STARTED);
     });
     if (isMultiLayerFeeNetwork(chainId)) {
       this.fetchEstimatedL1Fee();
@@ -340,17 +338,23 @@ class TransactionReview extends PureComponent {
     }
   };
 
+  onContactUsClicked = () => {
+    const { transaction } = this.props;
+    const additionalParams = {
+      ...getBlockaidMetricsParams(
+        transaction?.currentTransactionSecurityAlertResponse,
+      ),
+      external_link_clicked: 'security_alert_support_link',
+    };
+    AnalyticsV2.trackEvent(
+      MetaMetricsEvents.TRANSACTIONS_CONFIRM_STARTED,
+      additionalParams,
+    );
+  };
+
   componentWillUnmount = async () => {
     clearInterval(intervalIdForEstimatedL1Fee);
   };
-
-  async componentDidUpdate(prevProps) {
-    if (this.props.ready !== prevProps.ready) {
-      const error = this.props.validate && (await this.props.validate());
-      // eslint-disable-next-line react/no-did-update-set-state
-      this.setState({ error });
-    }
-  }
 
   getRenderValues = () => {
     const {
@@ -466,21 +470,20 @@ class TransactionReview extends PureComponent {
       gasSelected,
       chainId,
       transaction,
-      transaction: { to, origin, from, ensRecipient },
+      transaction: { to, origin, from, ensRecipient, id: transactionId },
+      error,
     } = this.props;
+
     const {
       actionKey,
-      error,
       assetAmount,
       conversionRate,
       fiatValue,
       approveTransaction,
       multiLayerL1FeeTotal,
-      senderBalanceIsZero,
     } = this.state;
     const url = this.getUrlFromBrowser();
     const styles = this.getStyles();
-
     return (
       <>
         <Animated.View
@@ -498,23 +501,6 @@ class TransactionReview extends PureComponent {
               asset={transaction?.selectedAsset}
             />
           )}
-          <TransactionReviewSummary
-            actionKey={actionKey}
-            assetAmount={assetAmount}
-            conversionRate={conversionRate}
-            fiatValue={fiatValue}
-            approveTransaction={approveTransaction}
-            primaryCurrency={primaryCurrency}
-            chainId={chainId}
-          />
-          {to && (
-            <View style={styles.accountWrapper}>
-              <AccountFromToInfoCard
-                transactionState={transaction}
-                layout="vertical"
-              />
-            </View>
-          )}
           <View style={styles.actionViewWrapper}>
             <ActionView
               confirmButtonMode="confirm"
@@ -523,10 +509,7 @@ class TransactionReview extends PureComponent {
               onConfirmPress={this.props.onConfirm}
               confirmed={transactionConfirmed}
               confirmDisabled={
-                senderBalanceIsZero ||
-                transactionConfirmed ||
-                Boolean(error) ||
-                isAnimating
+                transactionConfirmed || Boolean(error) || isAnimating
               }
             >
               <View style={styles.actionViewChildren}>
@@ -535,6 +518,30 @@ class TransactionReview extends PureComponent {
                     style={styles.accountTransactionWrapper}
                     onStartShouldSetResponder={() => true}
                   >
+                    {isBlockaidFeatureEnabled() && (
+                      <TransactionBlockaidBanner
+                        transactionId={transactionId}
+                        style={styles.blockaidWarning}
+                        onContactUsClicked={this.onContactUsClicked}
+                      />
+                    )}
+                    <TransactionReviewSummary
+                      actionKey={actionKey}
+                      assetAmount={assetAmount}
+                      conversionRate={conversionRate}
+                      fiatValue={fiatValue}
+                      approveTransaction={approveTransaction}
+                      primaryCurrency={primaryCurrency}
+                      chainId={chainId}
+                    />
+                    {to && (
+                      <View style={styles.accountWrapper}>
+                        <AccountFromToInfoCard
+                          transactionState={transaction}
+                          layout="vertical"
+                        />
+                      </View>
+                    )}
                     <View style={styles.accountInfoCardWrapper}>
                       <TransactionReviewInformation
                         navigation={navigation}
@@ -587,6 +594,8 @@ class TransactionReview extends PureComponent {
     const {
       QRState,
       transaction: { from },
+      onCancel,
+      onConfirm,
     } = this.props;
 
     const styles = this.getStyles();
@@ -600,6 +609,8 @@ class TransactionReview extends PureComponent {
           showHint={false}
           bypassAndroidCameraAccessCheck={false}
           fromAddress={from}
+          cancelCallback={onCancel}
+          successCallback={onConfirm}
         />
       </View>
     );
@@ -615,7 +626,6 @@ class TransactionReview extends PureComponent {
 
 const mapStateToProps = (state) => ({
   tokens: selectTokens(state),
-  accounts: selectAccounts(state),
   conversionRate: selectConversionRate(state),
   currentCurrency: selectCurrentCurrency(state),
   contractExchangeRates: selectContractExchangeRates(state),

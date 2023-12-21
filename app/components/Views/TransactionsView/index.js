@@ -21,7 +21,7 @@ import { addAccountTimeFlagFilter } from '../../../util/transactions';
 import { toLowerCaseEquals } from '../../../util/general';
 import {
   selectChainId,
-  selectNetwork,
+  selectNetworkId,
   selectProviderType,
 } from '../../../selectors/networkController';
 import {
@@ -33,6 +33,7 @@ import {
   selectIdentities,
   selectSelectedAddress,
 } from '../../../selectors/preferencesController';
+import { WalletViewSelectorsIDs } from '../../../../e2e/selectors/WalletView.selectors';
 
 const styles = StyleSheet.create({
   wrapper: {
@@ -55,11 +56,11 @@ const TransactionsView = ({
   const [submittedTxs, setSubmittedTxs] = useState([]);
   const [confirmedTxs, setConfirmedTxs] = useState([]);
   const [loading, setLoading] = useState();
-  const network = useSelector(selectNetwork);
+  const networkId = useSelector(selectNetworkId);
 
   const filterTransactions = useCallback(
-    (network) => {
-      if (network === 'loading') return;
+    (networkId) => {
+      if (networkId === null) return;
 
       let accountAddedTimeInsertPointFound = false;
       const addedAccountTime = identities[selectedAddress]?.importTime;
@@ -80,7 +81,7 @@ const TransactionsView = ({
           tokens,
           selectedAddress,
           chainId,
-          network,
+          networkId,
         );
 
         if (!filter) return false;
@@ -155,12 +156,15 @@ const TransactionsView = ({
     so the effect will not be noticeable if the user is in this screen.
     */
     InteractionManager.runAfterInteractions(() => {
-      filterTransactions(network);
+      filterTransactions(networkId);
     });
-  }, [filterTransactions, network]);
+  }, [filterTransactions, networkId]);
 
   return (
-    <View style={styles.wrapper} testID={'wallet-screen'}>
+    <View
+      style={styles.wrapper}
+      testID={WalletViewSelectorsIDs.WALLET_CONTAINER}
+    >
       <Transactions
         navigation={navigation}
         transactions={allTransactions}

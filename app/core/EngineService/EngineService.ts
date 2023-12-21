@@ -1,19 +1,20 @@
 import UntypedEngine from '../Engine';
 import AppConstants from '../AppConstants';
 import { getVaultFromBackup } from '../BackupVault';
+import { isBlockaidFeatureEnabled } from '../../util/blockaid';
 import { store as importedStore } from '../../store';
 import {
   NO_VAULT_IN_BACKUP_ERROR,
   VAULT_CREATION_ERROR,
 } from '../../constants/error';
 
-const UPDATE_BG_STATE_KEY = 'UPDATE_BG_STATE';
-const INIT_BG_STATE_KEY = 'INIT_BG_STATE';
-
 interface InitializeEngineResult {
   success: boolean;
   error?: string;
 }
+
+const UPDATE_BG_STATE_KEY = 'UPDATE_BG_STATE';
+const INIT_BG_STATE_KEY = 'INIT_BG_STATE';
 class EngineService {
   private engineInitialized = false;
 
@@ -41,7 +42,10 @@ class EngineService {
       { name: 'TokensController' },
       { name: 'TokenDetectionController' },
       { name: 'NftDetectionController' },
-      { name: 'KeyringController' },
+      {
+        name: 'KeyringController',
+        key: `${engine.context.KeyringController.name}:stateChange`,
+      },
       { name: 'AccountTrackerController' },
       {
         name: 'NetworkController',
@@ -69,11 +73,32 @@ class EngineService {
         name: 'ApprovalController',
         key: `${engine.context.ApprovalController.name}:stateChange`,
       },
+      ///: BEGIN:ONLY_INCLUDE_IF(snaps)
+      {
+        name: 'SnapController',
+        key: `${engine.context.SnapController.name}:stateChange`,
+      },
+      {
+        name: 'subjectMetadataController',
+        key: `${engine.context.SubjectMetadataController.name}:stateChange`,
+      },
+      ///: END:ONLY_INCLUDE_IF
       {
         name: 'PermissionController',
         key: `${engine.context.PermissionController.name}:stateChange`,
       },
+      {
+        name: 'LoggingController',
+        key: `${engine.context.LoggingController.name}:stateChange`,
+      },
     ];
+
+    if (isBlockaidFeatureEnabled()) {
+      controllers.push({
+        name: 'PPOMController',
+        key: AppConstants.PPOM_INITIALISATION_STATE_CHANGE_EVENT,
+      });
+    }
 
     engine?.datamodel?.subscribe?.(() => {
       if (!this.engineInitialized) {
@@ -84,8 +109,9 @@ class EngineService {
 
     controllers.forEach((controller) => {
       const { name, key = undefined } = controller;
-      const update_bg_state_cb = () =>
-        store.dispatch({ type: UPDATE_BG_STATE_KEY, key: name });
+      const update_bg_state_cb = () => {
+        store.dispatch({ type: UPDATE_BG_STATE_KEY, payload: { key: name } });
+      };
       if (key) {
         engine.controllerMessenger.subscribe(key, update_bg_state_cb);
       } else {
@@ -110,8 +136,13 @@ class EngineService {
     const Engine = UntypedEngine as any;
     // This ensures we create an entirely new engine
     await Engine.destroyEngine();
+    this.engineInitialized = false;
     if (keyringState) {
-      const instance = Engine.init(state, keyringState);
+      const newKeyringState = {
+        keyrings: [],
+        vault: keyringState.vault,
+      };
+      const instance = Engine.init(state, newKeyringState);
       if (instance) {
         this.updateControllers(importedStore, instance);
         // this is a hack to give the engine time to reinitialize

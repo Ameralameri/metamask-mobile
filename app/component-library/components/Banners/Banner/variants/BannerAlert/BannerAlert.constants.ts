@@ -2,8 +2,8 @@
 /* eslint-disable import/prefer-default-export */
 
 // External dependencies.
+import { ButtonVariants } from '../../../../Buttons/Button';
 import { IconName, IconSize } from '../../../../Icons/Icon';
-import { BannerVariant } from '../../Banner.types';
 
 // Internal dependencies.
 import {
@@ -33,11 +33,11 @@ export const SAMPLE_BANNERALERT_DESCRIPTION = 'Sample Banner Alert Description';
 export const SAMPLE_BANNERALERT_ACTIONBUTTONLABEL =
   'Sample Action Button Label';
 export const SAMPLE_BANNERALERT_PROPS: BannerAlertProps = {
-  variant: BannerVariant.Alert,
   severity: DEFAULT_BANNERALERT_SEVERITY,
   title: SAMPLE_BANNERALERT_TITLE,
   description: SAMPLE_BANNERALERT_DESCRIPTION,
   actionButtonProps: {
+    variant: ButtonVariants.Link,
     label: SAMPLE_BANNERALERT_ACTIONBUTTONLABEL,
     onPress: () => console.log('actionButton clicked!'),
   },

@@ -12,7 +12,6 @@ import { connect } from 'react-redux';
 import { toChecksumAddress } from 'ethereumjs-util';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/FontAwesome';
-import Engine from '../../../../core/Engine';
 import Analytics from '../../../../core/Analytics/Analytics';
 import AddressList from './../AddressList';
 import Text from '../../../Base/Text';
@@ -42,11 +41,6 @@ import {
 } from '../../../../actions/transaction';
 import ErrorMessage from '../ErrorMessage';
 import { strings } from '../../../../../locales/i18n';
-import {
-  ADDRESS_BOOK_NEXT_BUTTON,
-  NO_ETH_MESSAGE,
-  ADDRESS_ERROR,
-} from '../../../../constants/test-ids';
 import Routes from '../../../../constants/navigation/Routes';
 import {
   CONTACT_ALREADY_SAVED,
@@ -61,7 +55,6 @@ import {
 import generateTestId from '../../../../../wdio/utils/generateTestId';
 import {
   selectChainId,
-  selectNetwork,
   selectProviderType,
   selectTicker,
 } from '../../../../selectors/networkController';
@@ -70,10 +63,12 @@ import {
   selectSelectedAddress,
 } from '../../../../selectors/preferencesController';
 import AddToAddressBookWrapper from '../../../UI/AddToAddressBookWrapper';
-import { isNetworkBuyNativeTokenSupported } from '../../../UI/Ramp/utils';
+import { isNetworkRampNativeTokenSupported } from '../../../UI/Ramp/common/utils';
 import { getRampNetworks } from '../../../../reducers/fiatOrders';
 import SendFlowAddressFrom from '../AddressFrom';
 import SendFlowAddressTo from '../AddressTo';
+import { includes } from 'lodash';
+import { SendViewSelectorsIDs } from '../../../../../e2e/selectors/SendView.selectors';
 
 const dummy = () => true;
 
@@ -90,10 +85,6 @@ class SendFlow extends PureComponent {
      * Network provider chain id
      */
     chainId: PropTypes.string,
-    /**
-     * Network id
-     */
-    network: PropTypes.string,
     /**
      * Object that represents the navigator
      */
@@ -147,6 +138,14 @@ class SendFlow extends PureComponent {
      * Resets transaction state
      */
     resetTransaction: PropTypes.func,
+    /**
+     * Boolean to show warning if send to address is on multiple networks
+     */
+    showAmbiguousAcountWarning: PropTypes.bool,
+    /**
+     * Object of addresses associated with multiple chains {'id': [address: string]}
+     */
+    ambiguousAddressEntries: PropTypes.object,
   };
 
   addressToInputRef = React.createRef();
@@ -162,6 +161,7 @@ class SendFlow extends PureComponent {
     toEnsAddressResolved: undefined,
     confusableCollection: [],
     inputWidth: { width: '99%' },
+    showAmbiguousAcountWarning: false,
   };
 
   updateNavBar = () => {
@@ -182,7 +182,7 @@ class SendFlow extends PureComponent {
     const {
       addressBook,
       ticker,
-      network,
+      chainId,
       navigation,
       providerType,
       route,
@@ -191,7 +191,7 @@ class SendFlow extends PureComponent {
     this.updateNavBar();
     // For analytics
     navigation.setParams({ providerType, isPaymentRequest });
-    const networkAddressBook = addressBook[network] || {};
+    const networkAddressBook = addressBook[chainId] || {};
     if (!Object.keys(networkAddressBook).length) {
       setTimeout(() => {
         this.addressToInputRef &&
@@ -224,8 +224,8 @@ class SendFlow extends PureComponent {
 
   isAddressSaved = () => {
     const { toAccount } = this.state;
-    const { addressBook, network, identities } = this.props;
-    const networkAddressBook = addressBook[network] || {};
+    const { addressBook, chainId, identities } = this.props;
+    const networkAddressBook = addressBook[chainId] || {};
     const checksummedAddress = toChecksumAddress(toAccount);
     return !!(
       networkAddressBook[checksummedAddress] || identities[checksummedAddress]
@@ -248,25 +248,18 @@ class SendFlow extends PureComponent {
 
   handleNetworkSwitch = (chainId) => {
     try {
-      const {
-        NetworkController,
-        CurrencyRateController,
-        PreferencesController,
-      } = Engine.context;
       const { showAlert } = this.props;
-      const network = handleNetworkSwitch(chainId, {
-        networkController: NetworkController,
-        currencyRateController: CurrencyRateController,
-        preferencesController: PreferencesController,
-      });
+      const networkName = handleNetworkSwitch(chainId);
 
-      if (!network) return;
+      if (!networkName) return;
 
       showAlert({
         isVisible: true,
         autodismiss: 5000,
         content: 'clipboard-alert',
-        data: { msg: strings('send.warn_network_change') + network },
+        data: {
+          msg: strings('send.warn_network_change') + networkName,
+        },
       });
     } catch (e) {
       let alertMessage;
@@ -321,7 +314,7 @@ class SendFlow extends PureComponent {
   };
 
   goToBuy = () => {
-    this.props.navigation.navigate(Routes.FIAT_ON_RAMP_AGGREGATOR.ID);
+    this.props.navigation.navigate(Routes.RAMP.BUY);
     InteractionManager.runAfterInteractions(() => {
       AnalyticsV2.trackEvent(MetaMetricsEvents.BUY_BUTTON_CLICKED, {
         button_location: 'Send Flow warning',
@@ -374,10 +367,10 @@ class SendFlow extends PureComponent {
   };
 
   getAddressNameFromBookOrIdentities = (toAccount) => {
-    const { addressBook, identities, network } = this.props;
+    const { addressBook, identities, chainId } = this.props;
     if (!toAccount) return;
 
-    const networkAddressBook = addressBook[network] || {};
+    const networkAddressBook = addressBook[chainId] || {};
 
     const checksummedAddress = toChecksumAddress(toAccount);
 
@@ -389,7 +382,7 @@ class SendFlow extends PureComponent {
   };
 
   validateAddressOrENSFromInput = async (toAccount) => {
-    const { addressBook, identities, chainId, network } = this.props;
+    const { addressBook, identities, chainId } = this.props;
     const {
       addressError,
       toEnsName,
@@ -402,7 +395,6 @@ class SendFlow extends PureComponent {
       confusableCollection,
     } = await validateAddressOrENS({
       toAccount,
-      network,
       addressBook,
       identities,
       chainId,
@@ -422,6 +414,19 @@ class SendFlow extends PureComponent {
   };
 
   onToSelectedAddressChange = (toAccount) => {
+    const currentChain =
+      this.props.ambiguousAddressEntries &&
+      this.props.ambiguousAddressEntries[this.props.chainId];
+    const isAmbiguousAddress = includes(currentChain, toAccount);
+    if (isAmbiguousAddress) {
+      this.setState({ showAmbiguousAcountWarning: isAmbiguousAddress });
+      AnalyticsV2.trackEvent(
+        MetaMetricsEvents.SEND_FLOW_SELECT_DUPLICATE_ADDRESS,
+        {
+          chain_id: this.props.chainId,
+        },
+      );
+    }
     const addressName = this.getAddressNameFromBookOrIdentities(toAccount);
 
     /**
@@ -448,8 +453,19 @@ class SendFlow extends PureComponent {
     }
   };
 
+  onIconPress = () => {
+    const { navigation } = this.props;
+    navigation.navigate(Routes.MODAL.ROOT_MODAL_FLOW, {
+      screen: Routes.SHEET.AMBIGUOUS_ADDRESS,
+    });
+  };
+
+  onAmbiguousAcountWarningDismiss = () => {
+    this.setState({ showAmbiguousAcountWarning: false });
+  };
+
   render = () => {
-    const { ticker, addressBook, network } = this.props;
+    const { ticker, addressBook, chainId } = this.props;
     const {
       toAccount,
       toSelectedAddressReady,
@@ -472,8 +488,8 @@ class SendFlow extends PureComponent {
     );
     const existingContact =
       checksummedAddress &&
-      addressBook[network] &&
-      addressBook[network][checksummedAddress];
+      addressBook[chainId] &&
+      addressBook[chainId][checksummedAddress];
     const displayConfusableWarning =
       !existingContact && confusableCollection && !!confusableCollection.length;
     const displayAsWarning =
@@ -527,6 +543,7 @@ class SendFlow extends PureComponent {
         {!toSelectedAddressReady ? (
           <AddressList
             inputSearch={toAccount}
+            onIconPress={this.onIconPress}
             onAccountPress={this.onToSelectedAddressChange}
             onAccountLongPress={dummy}
           />
@@ -534,7 +551,10 @@ class SendFlow extends PureComponent {
           <View style={styles.nextActionWrapper}>
             <ScrollView>
               {addressError && addressError !== CONTACT_ALREADY_SAVED && (
-                <View style={styles.addressErrorWrapper} testID={ADDRESS_ERROR}>
+                <View
+                  style={styles.addressErrorWrapper}
+                  testID={SendViewSelectorsIDs.ADDRESS_ERROR}
+                >
                   <ErrorMessage
                     errorMessage={this.renderAddressError(addressError)}
                     errorContinue={!!errorContinue}
@@ -601,19 +621,30 @@ class SendFlow extends PureComponent {
                   />
                 </View>
               )}
+              {this.state.showAmbiguousAcountWarning && (
+                <View style={styles.warningContainer}>
+                  <WarningMessage
+                    onDismiss={this.onAmbiguousAcountWarningDismiss}
+                    warningMessage={<>{strings('duplicate_address.body')}</>}
+                  />
+                </View>
+              )}
             </ScrollView>
           </View>
         )}
 
         {!errorContinue && (
-          <View style={styles.footerContainer} testID={NO_ETH_MESSAGE}>
+          <View
+            style={styles.footerContainer}
+            testID={SendViewSelectorsIDs.NO_ETH_MESSAGE}
+          >
             {!errorContinue && (
               <View style={styles.buttonNextWrapper}>
                 <StyledButton
                   type={'confirm'}
                   containerStyle={styles.buttonNext}
                   onPress={this.onTransactionDirectionSet}
-                  testID={ADDRESS_BOOK_NEXT_BUTTON}
+                  testID={SendViewSelectorsIDs.ADDRESS_BOOK_NEXT_BUTTON}
                   //To selectedAddressReady needs to be calculated on this component, needing a bigger refactor
                   //Will be here just to ensure that we don't break existing conditions
                   disabled={
@@ -644,13 +675,13 @@ const mapStateToProps = (state) => ({
   selectedAsset: state.transaction.selectedAsset,
   identities: selectIdentities(state),
   ticker: selectTicker(state),
-  network: selectNetwork(state),
   providerType: selectProviderType(state),
   isPaymentRequest: state.transaction.paymentRequest,
-  isNativeTokenBuySupported: isNetworkBuyNativeTokenSupported(
+  isNativeTokenBuySupported: isNetworkRampNativeTokenSupported(
     selectChainId(state),
     getRampNetworks(state),
   ),
+  ambiguousAddressEntries: state.user.ambiguousAddressEntries,
 });
 
 const mapDispatchToProps = (dispatch) => ({

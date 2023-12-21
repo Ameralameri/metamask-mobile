@@ -115,7 +115,10 @@ jest.mock('react-native-keychain', () => ({
   setInternetCredentials: jest
     .fn(('server', 'username', 'password'))
     .mockResolvedValue({ service: 'metamask', storage: 'storage' }),
-  resetInternetCredentials: jest.fn(),
+  getInternetCredentials: jest
+    .fn()
+    .mockResolvedValue({ password: 'mock-credentials-password' }),
+  resetInternetCredentials: jest.fn().mockResolvedValue(),
   ACCESSIBLE: {
     WHEN_UNLOCKED: 'AccessibleWhenUnlocked',
     AFTER_FIRST_UNLOCK: 'AccessibleAfterFirstUnlock',
@@ -146,19 +149,6 @@ jest.mock(
   () => mockRNAsyncStorage,
 );
 jest.mock('@react-native-cookies/cookies', () => 'RNCookies');
-
-const mockReactNativeWebRTC = {
-  RTCPeerConnection: () => null,
-  RTCIceCandidate: () => null,
-  RTCSessionDescription: () => null,
-  RTCView: () => null,
-  MediaStream: () => null,
-  MediaStreamTrack: () => null,
-  mediaDevices: () => null,
-  registerGlobals: () => null,
-};
-
-jest.mock('react-native-webrtc', () => mockReactNativeWebRTC);
 
 NativeModules.RNGestureHandlerModule = {
   attachGestureHandler: jest.fn(),
@@ -213,6 +203,26 @@ jest.mock('react-native/Libraries/Interaction/InteractionManager', () => ({
 jest.mock('../../images/static-logos.js', () => ({}));
 
 jest.mock('@react-native-clipboard/clipboard', () => mockClipboard);
+
+jest.mock('react-native-permissions', () => ({
+  check: jest.fn().mockRejectedValue('granted'),
+  checkMultiple: jest.fn().mockRejectedValue({
+    'android.permission.ACCESS_FINE_LOCATION': 'granted',
+    'android.permission.BLUETOOTH_SCAN': 'granted',
+    'android.permission.BLUETOOTH_CONNECT': 'granted',
+  }),
+  PERMISSIONS: {
+    IOS: {
+      BLUETOOTH_PERIPHERAL: 'ios.permission.BLUETOOTH_PERIPHERAL',
+    },
+    ANDROID: {
+      ACCESS_FINE_LOCATION: 'android.permission.ACCESS_FINE_LOCATION',
+      BLUETOOTH_SCAN: 'android.permission.BLUETOOTH_SCAN',
+      BLUETOOTH_CONNECT: 'android.permission.BLUETOOTH_CONNECT',
+    },
+  },
+  openSettings: jest.fn(),
+}));
 
 jest.mock('../theme', () => ({
   ...jest.requireActual('../theme'),

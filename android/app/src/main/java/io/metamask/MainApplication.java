@@ -18,10 +18,12 @@ import com.facebook.react.defaults.DefaultReactNativeHost;
 import java.util.List;
 import io.metamask.nativeModules.PreventScreenshotPackage;
 import android.webkit.WebView;
-import android.os.Bundle;
 
 import android.database.CursorWindow;
 import java.lang.reflect.Field;
+
+import io.metamask.nativesdk.NativeSDKPackage;
+import io.metamask.nativeModules.RNTar.RNTarPackage;
 
 public class MainApplication extends Application implements ShareApplication, ReactApplication {
 
@@ -45,6 +47,8 @@ public class MainApplication extends Application implements ShareApplication, Re
 			packages.add(new ReactVideoPackage());
 			packages.add(new RCTAnalyticsPackage());
       packages.add(new RCTMinimizerPackage());
+      packages.add(new NativeSDKPackage());
+      packages.add(new RNTarPackage());
 
       return packages;
 		}
@@ -81,8 +85,11 @@ public class MainApplication extends Application implements ShareApplication, Re
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
-
-		if (BuildConfig.DEBUG) {
+		// These two lines are here to enable debugging WebView from Chrome DevTools.
+		// The variables are set in the build.gradle file with values coming from the environment variables
+		// `RAMP_DEV_BUILD` and `RAMP_INTERNAL_BUILD`.
+		// These variables are defined at build time in Bitrise
+		if (BuildConfig.DEBUG || BuildConfig.IS_RAMP_UAT.equals("true") || BuildConfig.IS_RAMP_DEV.equals("true")) {
 			WebView.setWebContentsDebuggingEnabled(true);
 		}
 

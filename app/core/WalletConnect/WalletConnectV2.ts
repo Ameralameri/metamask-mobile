@@ -10,13 +10,12 @@ import { KeyringController } from '@metamask/keyring-controller';
 import { PreferencesController } from '@metamask/preferences-controller';
 import Logger from '../../util/Logger';
 
-import { NetworkController } from '@metamask/network-controller';
 import {
   TransactionController,
   WalletDevice,
 } from '@metamask/transaction-controller';
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '../../store/async-storage-wrapper';
 import { Core } from '@walletconnect/core';
 import { ErrorResponse } from '@walletconnect/jsonrpc-types';
 import Client, {
@@ -33,6 +32,10 @@ import METHODS_TO_REDIRECT from './wc-config';
 import parseWalletConnectUri, {
   waitForNetworkModalOnboarding,
 } from './wc-utils';
+import { selectChainId } from '../../selectors/networkController';
+import { store } from '../../store';
+import { WALLET_CONNECT_ORIGIN } from '../../../app/util/walletconnect';
+import ppomUtil from '../../../app/lib/ppom/ppom-util';
 
 const { PROJECT_ID } = AppConstants.WALLET_CONNECT;
 export const isWC2Enabled =
@@ -139,8 +142,6 @@ class WalletConnect2Session {
     if (!this.deeplink) return;
 
     setTimeout(() => {
-      // Reset the status of deeplink after each redirect
-      this.deeplink = false;
       Minimizer.goBack();
     }, 300);
   };
@@ -252,6 +253,7 @@ class WalletConnect2Session {
 
     const verified = requestEvent.verifyContext?.verified;
     const hostname = verified?.origin;
+    const origin = WALLET_CONNECT_ORIGIN + hostname; // allow correct origin for analytics with eth_sendTtansaction
 
     let method = requestEvent.params.request.method;
     const chainId = parseInt(requestEvent.params.chainId);
@@ -261,10 +263,8 @@ class WalletConnect2Session {
       methodParams,
     );
 
-    const networkController = (
-      Engine.context as { NetworkController: NetworkController }
-    ).NetworkController;
-    const selectedChainId = parseInt(networkController.state.network);
+    // TODO: Misleading variable name, this is not the chain ID. This should be updated to use the chain ID.
+    const selectedChainId = parseInt(selectChainId(store.getState()));
 
     if (selectedChainId !== chainId) {
       await this.web3Wallet.rejectRequest({
@@ -287,9 +287,31 @@ class WalletConnect2Session {
 
         const trx = await transactionController.addTransaction(
           methodParams[0],
-          hostname,
-          WalletDevice.MM_MOBILE,
+          {
+            origin,
+            deviceConfirmedOn: WalletDevice.MM_MOBILE,
+            securityAlertResponse: undefined,
+          },
         );
+
+        const id = trx.transactionMeta.id;
+        const reqObject = {
+          id: requestEvent.id,
+          jsonrpc: '2.0',
+          method,
+          origin,
+          params: [
+            {
+              from: methodParams[0].from,
+              to: methodParams[0].to,
+              value: methodParams[0]?.value,
+              data: methodParams[0]?.data,
+            },
+          ],
+        };
+
+        ppomUtil.validateRequest(reqObject, id);
+
         const hash = await trx.result;
 
         await this.approveRequest({ id: requestEvent.id + '', result: hash });
@@ -311,7 +333,7 @@ class WalletConnect2Session {
         method,
         params: methodParams,
       },
-      origin: hostname,
+      origin,
     });
   };
 }
@@ -356,11 +378,9 @@ export class WC2Manager {
       Engine.context as { PreferencesController: PreferencesController }
     ).PreferencesController;
 
-    const networkController = (
-      Engine.context as { NetworkController: NetworkController }
-    ).NetworkController;
     const selectedAddress = preferencesController.state.selectedAddress;
-    const chainId = networkController.state.network;
+    // TODO: Misleading variable name, this is not the chain ID. This should be updated to use the chain ID.
+    const chainId = selectChainId(store.getState());
 
     Object.keys(sessions).forEach(async (sessionKey) => {
       try {
@@ -580,11 +600,9 @@ export class WC2Manager {
         Engine.context as { PreferencesController: PreferencesController }
       ).PreferencesController;
 
-      const networkController = (
-        Engine.context as { NetworkController: NetworkController }
-      ).NetworkController;
       const selectedAddress = preferencesController.state.selectedAddress;
-      const chainId = networkController.state.network;
+      // TODO: Misleading variable name, this is not the chain ID. This should be updated to use the chain ID.
+      const chainId = selectChainId(store.getState());
 
       const activeSession = await this.web3Wallet.approveSession({
         id: proposal.id,
@@ -616,7 +634,10 @@ export class WC2Manager {
     const keyringController = (
       Engine.context as { KeyringController: KeyringController }
     ).KeyringController;
-    await waitForKeychainUnlocked({ keyringController });
+    await waitForKeychainUnlocked({
+      keyringController,
+      context: 'WalletConnectV2::onSessionRequest',
+    });
 
     try {
       const session = this.sessions[requestEvent.topic];

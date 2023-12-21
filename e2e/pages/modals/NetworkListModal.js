@@ -3,11 +3,10 @@ import {
   NETWORK_SCROLL_ID,
   NETWORK_TEST_SWITCH_ID,
   OTHER_NETWORK_LIST_ID,
+  ADD_NETWORK_BUTTON,
 } from '../../../wdio/screen-objects/testIDs/Components/NetworkListModal.TestIds';
+import { NetworkListModalSelectorsText } from '../../selectors/Modals/NetworkListModal.selectors';
 
-import messages from '../../../locales/languages/en.json';
-
-const SELECT_NETWORK_TEXT = messages.networks.select_network;
 export default class NetworkListModal {
   static async changeNetwork(networkName) {
     await TestHelpers.tapByText(networkName);
@@ -19,7 +18,12 @@ export default class NetworkListModal {
   }
 
   static async swipeToDismissModal() {
-    await TestHelpers.swipeByText(SELECT_NETWORK_TEXT, 'down', 'slow', 0.6);
+    await TestHelpers.swipeByText(
+      NetworkListModalSelectorsText.SELECT_NETWORK,
+      'down',
+      'slow',
+      0.6,
+    );
   }
 
   static async isVisible() {
@@ -41,6 +45,10 @@ export default class NetworkListModal {
     await TestHelpers.waitAndTap(NETWORK_TEST_SWITCH_ID);
   }
 
+  static async tapAddNetworkButton() {
+    await TestHelpers.waitAndTap(ADD_NETWORK_BUTTON);
+  }
+
   static async isTestNetworkToggleOn() {
     await TestHelpers.checkIfToggleIsOn(NETWORK_TEST_SWITCH_ID);
   }
@@ -49,7 +57,7 @@ export default class NetworkListModal {
     await TestHelpers.checkIfToggleIsOff(NETWORK_TEST_SWITCH_ID);
   }
 
-  static async isTestNetworkDisplayed(network) {
-    await TestHelpers.checkIfElementWithTextIsNotVisible(network);
+  static async isTestNetworkDisplayed(networkName) {
+    await TestHelpers.checkIfElementWithTextIsNotVisible(networkName);
   }
 }

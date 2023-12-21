@@ -5,7 +5,7 @@ import {
   InteractionManager,
   Alert,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, CommonActions } from '@react-navigation/native';
 import SettingsDrawer from '../../UI/SettingsDrawer';
 import { getSettingsNavigationOptions } from '../../UI/Navbar';
 import { strings } from '../../../../locales/i18n';
@@ -29,6 +29,9 @@ import {
   REQUEST_SETTINGS,
   SECURITY_SETTINGS,
 } from '../../../../wdio/screen-objects/testIDs/Screens/Settings.testIds';
+///: BEGIN:ONLY_INCLUDE_IF(snaps)
+import { createSnapsSettingsListNavDetails } from '../Snaps/SnapsSettingsList/SnapsSettingsList';
+///: END:ONLY_INCLUDE_IF
 
 const createStyles = (colors: Colors) =>
   StyleSheet.create({
@@ -87,7 +90,7 @@ const Settings = () => {
 
   const onPressOnRamp = () => {
     trackEvent(MetaMetricsEvents.ONRAMP_SETTINGS_CLICKED);
-    navigation.navigate(Routes.FIAT_ON_RAMP_AGGREGATOR.SETTINGS);
+    navigation.navigate(Routes.RAMP.SETTINGS);
   };
 
   const onPressExperimental = () => {
@@ -114,6 +117,12 @@ const Settings = () => {
     });
   };
 
+  ///: BEGIN:ONLY_INCLUDE_IF(snaps)
+  const onPressSnaps = () => {
+    navigation.navigate(...createSnapsSettingsListNavDetails());
+  };
+  ///: END:ONLY_INCLUDE_IF
+
   const submitFeedback = () => {
     trackEvent(MetaMetricsEvents.NAVIGATION_TAPS_SEND_FEEDBACK);
     goToBrowserUrl(
@@ -138,7 +147,12 @@ const Settings = () => {
         params: { screen: 'Onboarding' },
       });
     } else {
-      navigation.replace(Routes.ONBOARDING.LOGIN, { locked: true });
+      // TODO: Consolidate navigation action for locking app
+      const resetAction = CommonActions.reset({
+        index: 0,
+        routes: [{ name: Routes.ONBOARDING.LOGIN, params: { locked: true } }],
+      });
+      navigation.dispatch(resetAction);
     }
   };
 
@@ -161,6 +175,12 @@ const Settings = () => {
     );
     trackEvent(MetaMetricsEvents.NAVIGATION_TAPS_LOGOUT);
   };
+
+  let aboutMetaMaskTitle = strings('app_settings.info_title');
+
+  ///: BEGIN:ONLY_INCLUDE_IF(flask)
+  aboutMetaMaskTitle = strings('app_settings.info_title_flask');
+  ///: END:ONLY_INCLUDE_IF
 
   return (
     <ScrollView style={styles.wrapper}>
@@ -195,6 +215,17 @@ const Settings = () => {
         onPress={onPressNetworks}
         testID={NETWORKS_SETTINGS}
       />
+      {
+        ///: BEGIN:ONLY_INCLUDE_IF(snaps)
+      }
+      <SettingsDrawer
+        title={strings('app_settings.snaps.title')}
+        description={strings('app_settings.snaps.description')}
+        onPress={onPressSnaps}
+      />
+      {
+        ///: END:ONLY_INCLUDE_IF
+      }
       <SettingsDrawer
         title={strings('app_settings.fiat_on_ramp.title')}
         description={strings('app_settings.fiat_on_ramp.description')}
@@ -208,7 +239,7 @@ const Settings = () => {
         testID={EXPERIMENTAL_SETTINGS}
       />
       <SettingsDrawer
-        title={strings('app_settings.info_title')}
+        title={aboutMetaMaskTitle}
         onPress={onPressInfo}
         testID={ABOUT_METAMASK_SETTINGS}
       />

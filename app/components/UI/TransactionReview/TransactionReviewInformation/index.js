@@ -31,7 +31,12 @@ import {
 import { sumHexWEIs } from '../../../../util/conversions';
 import Analytics from '../../../../core/Analytics/Analytics';
 import { MetaMetricsEvents } from '../../../../core/Analytics';
-import { getNetworkNonce, isTestNet } from '../../../../util/networks';
+import {
+  TESTNET_FAUCETS,
+  getNetworkNonce,
+  isTestNet,
+  isTestNetworkWithFaucet,
+} from '../../../../util/networks';
 import CustomNonceModal from '../../../UI/CustomNonceModal';
 import { setNonce, setProposedNonce } from '../../../../actions/transaction';
 import TransactionReviewEIP1559 from '../TransactionReviewEIP1559';
@@ -43,7 +48,6 @@ import AppConstants from '../../../../core/AppConstants';
 import WarningMessage from '../../../Views/SendFlow/WarningMessage';
 import {
   selectChainId,
-  selectNetwork,
   selectTicker,
 } from '../../../../selectors/networkController';
 import {
@@ -53,8 +57,9 @@ import {
 } from '../../../../selectors/currencyRateController';
 import { selectContractExchangeRates } from '../../../../selectors/tokenRatesController';
 import { createBrowserNavDetails } from '../../../Views/Browser';
-import { isNetworkBuyNativeTokenSupported } from '../../Ramp/utils';
+import { isNetworkRampNativeTokenSupported } from '../../Ramp/common/utils';
 import { getRampNetworks } from '../../../../reducers/fiatOrders';
+import Routes from '../../../../constants/navigation/Routes';
 
 const createStyles = (colors) =>
   StyleSheet.create({
@@ -181,9 +186,9 @@ class TransactionReviewInformation extends PureComponent {
      */
     onCancelPress: PropTypes.func,
     /**
-     * Network id
+     * The chain ID for the current selected network
      */
-    network: PropTypes.string,
+    chainId: PropTypes.string,
     /**
      * Indicates whether custom nonce should be shown in transaction editor
      */
@@ -288,7 +293,7 @@ class TransactionReviewInformation extends PureComponent {
     /* this is kinda weird, we have to reject the transaction to collapse the modal */
     this.onCancelPress();
     try {
-      navigation.navigate('FiatOnRampAggregator');
+      navigation.navigate(Routes.RAMP.BUY);
     } catch (error) {
       Logger.error(error, 'Navigation: Error when navigating to buy ETH.');
     }
@@ -357,8 +362,8 @@ class TransactionReviewInformation extends PureComponent {
   };
 
   isTestNetwork = () => {
-    const { network } = this.props;
-    return isTestNet(network);
+    const { chainId } = this.props;
+    return isTestNet(chainId);
   };
 
   getRenderTotalsEIP1559 = ({
@@ -525,11 +530,12 @@ class TransactionReviewInformation extends PureComponent {
   };
 
   goToFaucet = () => {
+    const { chainId } = this.props;
     InteractionManager.runAfterInteractions(() => {
       this.onCancelPress();
       this.props.navigation.navigate(
         ...createBrowserNavDetails({
-          newTabUrl: AppConstants.URLS.MM_FAUCET,
+          newTabUrl: TESTNET_FAUCETS[chainId],
           timestamp: Date.now(),
         }),
       );
@@ -582,7 +588,7 @@ class TransactionReviewInformation extends PureComponent {
     );
   };
 
-  renderTransactionReviewFeeCard = () => {
+  renderTransactionReviewLegacy = () => {
     const {
       primaryCurrency,
       ready,
@@ -632,8 +638,9 @@ class TransactionReviewInformation extends PureComponent {
   render() {
     const { amountError, nonceModalVisible } = this.state;
     const {
+      chainId,
       toggleDataView,
-      transaction: { warningGasPriceHigh },
+      transaction: { warningGasPriceHigh, type },
       error,
       over,
       showCustomNonce,
@@ -651,16 +658,17 @@ class TransactionReviewInformation extends PureComponent {
       : strings('transaction.buy_more');
 
     const showFeeMarket =
-      !gasEstimateType ||
-      gasEstimateType === GAS_ESTIMATE_TYPES.FEE_MARKET ||
-      gasEstimateType === GAS_ESTIMATE_TYPES.NONE;
+      (!gasEstimateType ||
+        gasEstimateType === GAS_ESTIMATE_TYPES.FEE_MARKET ||
+        gasEstimateType === GAS_ESTIMATE_TYPES.NONE) &&
+      type !== '0x0';
 
     return (
       <React.Fragment>
         {nonceModalVisible && this.renderCustomNonceModal()}
         {showFeeMarket
           ? this.renderTransactionReviewEIP1559()
-          : this.renderTransactionReviewFeeCard()}
+          : this.renderTransactionReviewLegacy()}
         {gasSelected === AppConstants.GAS_OPTIONS.LOW && (
           <WarningMessage
             style={styles.actionsWrapper}
@@ -684,7 +692,7 @@ class TransactionReviewInformation extends PureComponent {
         )}
         {!!error && (
           <View style={styles.errorWrapper}>
-            {this.isTestNetwork() || isNativeTokenBuySupported ? (
+            {isTestNetworkWithFaucet(chainId) || isNativeTokenBuySupported ? (
               <TouchableOpacity onPress={errorPress}>
                 <Text style={styles.error}>{error}</Text>
                 {over && (
@@ -721,7 +729,7 @@ class TransactionReviewInformation extends PureComponent {
 }
 
 const mapStateToProps = (state) => ({
-  network: selectNetwork(state),
+  chainId: selectChainId(state),
   conversionRate: selectConversionRate(state),
   currentCurrency: selectCurrentCurrency(state),
   nativeCurrency: selectNativeCurrency(state),
@@ -730,7 +738,7 @@ const mapStateToProps = (state) => ({
   ticker: selectTicker(state),
   primaryCurrency: state.settings.primaryCurrency,
   showCustomNonce: state.settings.showCustomNonce,
-  isNativeTokenBuySupported: isNetworkBuyNativeTokenSupported(
+  isNativeTokenBuySupported: isNetworkRampNativeTokenSupported(
     selectChainId(state),
     getRampNetworks(state),
   ),

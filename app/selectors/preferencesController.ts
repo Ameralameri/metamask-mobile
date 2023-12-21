@@ -1,8 +1,8 @@
 import { createSelector } from 'reselect';
 import { PreferencesState } from '@metamask/preferences-controller';
-import { EngineState } from './types';
+import { RootState } from '../reducers';
 
-const selectPreferencesControllerState = (state: EngineState) =>
+const selectPreferencesControllerState = (state: RootState) =>
   state.engine.backgroundState.PreferencesController;
 
 export const selectIdentities = createSelector(
@@ -23,12 +23,6 @@ export const selectSelectedAddress = createSelector(
     preferencesControllerState.selectedAddress,
 );
 
-export const selectFrequentRpcList = createSelector(
-  selectPreferencesControllerState,
-  (preferencesControllerState: PreferencesState) =>
-    preferencesControllerState.frequentRpcList,
-);
-
 export const selectUseNftDetection = createSelector(
   selectPreferencesControllerState,
   (preferencesControllerState: PreferencesState) =>
@@ -41,10 +35,10 @@ export const selectUseTokenDetection = createSelector(
     preferencesControllerState.useTokenDetection,
 );
 
-export const selectOpenSeaEnabled = createSelector(
+export const selectDisplayNftMedia = createSelector(
   selectPreferencesControllerState,
   (preferencesControllerState: PreferencesState) =>
-    preferencesControllerState.openSeaEnabled,
+    preferencesControllerState.displayNftMedia,
 );
 
 export const selectDisabledRpcMethodPreferences = createSelector(
@@ -73,4 +67,34 @@ export const selectShowTestNetworks = createSelector(
         showTestNetworks: boolean;
       }
     ).showTestNetworks,
+);
+
+export const selectShowIncomingTransactionNetworks = createSelector(
+  selectPreferencesControllerState,
+  (preferencesControllerState: PreferencesState) =>
+    (
+      preferencesControllerState as PreferencesState & {
+        showIncomingTransactions: { [chainId: string]: boolean };
+      }
+    ).showIncomingTransactions,
+);
+
+export const selectIsIpfsGatewayEnabled = createSelector(
+  selectPreferencesControllerState,
+  (preferencesControllerState: PreferencesState) =>
+    (
+      preferencesControllerState as PreferencesState & {
+        isIpfsGatewayEnabled: boolean;
+      }
+    ).isIpfsGatewayEnabled,
+);
+
+export const selectIsSecurityAlertsEnabled = createSelector(
+  selectPreferencesControllerState,
+  (preferencesControllerState: PreferencesState) =>
+    (
+      preferencesControllerState as PreferencesState & {
+        securityAlertsEnabled: boolean;
+      }
+    ).securityAlertsEnabled,
 );

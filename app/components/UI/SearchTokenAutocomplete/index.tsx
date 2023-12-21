@@ -106,7 +106,10 @@ const SearchTokenAutocomplete = ({ navigation }: Props) => {
 
   const addToken = useCallback(async () => {
     const { TokensController } = Engine.context as any;
-    await TokensController.addToken(address, symbol, decimals, iconUrl, name);
+    await TokensController.addToken(address, symbol, decimals, {
+      image: iconUrl,
+      name,
+    });
 
     AnalyticsV2.trackEvent(MetaMetricsEvents.TOKEN_ADDED, getAnalyticsParams());
 
@@ -189,7 +192,7 @@ const SearchTokenAutocomplete = ({ navigation }: Props) => {
   ]);
 
   return (
-    <View style={styles.wrapper} testID={'search-token-screen'}>
+    <View style={styles.wrapper}>
       <ActionView
         cancelText={strings('add_asset.tokens.cancel_add_token')}
         confirmText={strings('add_asset.tokens.add_token')}

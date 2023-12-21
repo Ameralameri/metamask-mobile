@@ -1,5 +1,5 @@
 import React, { memo, useEffect, useState, useCallback } from 'react';
-import { TextInput, View, StyleSheet, Platform } from 'react-native';
+import { TextInput, View, StyleSheet, Platform, TextStyle } from 'react-native';
 import { fontStyles } from '../../../styles/common';
 import { strings } from '../../../../locales/i18n';
 import Fuse from 'fuse.js';
@@ -10,6 +10,7 @@ import { TokenListToken } from '@metamask/assets-controllers';
 import { useTheme } from '../../../util/theme';
 import generateTestId from '../../../../wdio/utils/generateTestId';
 import { TOKEN_INPUT_BOX_ID } from '../../../../wdio/screen-objects/testIDs/Screens/AssetSearch.testIds';
+import { TokenViewSelectors } from '../../../../e2e/selectors/AddTokenView.selectors';
 import { selectTokenListArray } from '../../../selectors/tokenListController';
 
 const createStyles = (colors: any) =>
@@ -29,7 +30,7 @@ const createStyles = (colors: any) =>
     textInput: {
       ...fontStyles.normal,
       color: colors.text.default,
-    } as StyleSheet.NamedStyles<any>,
+    } as TextStyle,
     icon: {
       padding: 16,
       color: colors.icon.alternative,
@@ -100,7 +101,10 @@ const AssetSearch = memo(({ onSearch, onFocus, onBlur }: Props) => {
   );
 
   return (
-    <View style={styles.searchSection} testID={'add-searched-token-screen'}>
+    <View
+      style={styles.searchSection}
+      testID={TokenViewSelectors.ASSET_SEARCH_SCREEN_CONTAINER}
+    >
       <Icon name="search" size={22} style={styles.icon} />
       <TextInput
         style={[

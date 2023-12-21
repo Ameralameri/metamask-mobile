@@ -11,6 +11,7 @@ import {
   AppState,
   StyleSheet,
   View,
+  Linking,
   PushNotificationIOS, // eslint-disable-line react-native/split-platform-components
 } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
@@ -63,13 +64,18 @@ import { useEnableAutomaticSecurityChecks } from '../../hooks/EnableAutomaticSec
 import { useMinimumVersions } from '../../hooks/MinimumVersions';
 import navigateTermsOfUse from '../../../util/termsOfUse/termsOfUse';
 import {
+  selectChainId,
   selectProviderConfig,
   selectProviderType,
 } from '../../../selectors/networkController';
-import WarningAlert from '../../../components/UI/WarningAlert/WarningAlert';
-import { LINEA_MAINNET } from '../../../constants/network';
-import jsonRpcRequest from '../../../util/jsonRpcRequest';
-import { LINEA_MAINNET_RPC_URL } from '../../../constants/urls';
+import { selectShowIncomingTransactionNetworks } from '../../../selectors/preferencesController';
+import { addHexPrefix, toHexadecimal } from '../../../util/number';
+import { NETWORKS_CHAIN_ID } from '../../../constants/network';
+import WarningAlert from '../../../components/UI/WarningAlert';
+import { GOERLI_DEPRECATED_ARTICLE } from '../../../constants/urls';
+///: BEGIN:ONLY_INCLUDE_IF(snaps)
+import { SnapsExecutionWebView } from '../../UI/SnapsExecutionWebView';
+///: END:ONLY_INCLUDE_IF
 
 const Stack = createStackNavigator();
 
@@ -91,7 +97,7 @@ const Main = (props) => {
   const [forceReload, setForceReload] = useState(false);
   const [showRemindLaterModal, setShowRemindLaterModal] = useState(false);
   const [skipCheckbox, setSkipCheckbox] = useState(false);
-  const [showLineaMainnetAlert, setShowLineaMainnetAlert] = useState(false);
+  const [showDeprecatedAlert, setShowDeprecatedAlert] = useState(true);
   const { colors } = useTheme();
   const styles = createStyles(colors);
 
@@ -104,15 +110,16 @@ const Main = (props) => {
   useEnableAutomaticSecurityChecks();
   useMinimumVersions();
 
-  const pollForIncomingTransactions = useCallback(async () => {
-    props.thirdPartyApiMode && (await Engine.refreshTransactionHistory());
-    // Stop polling if the app is in the background
-    if (!backgroundMode.current) {
-      setTimeout(() => {
-        pollForIncomingTransactions();
-      }, AppConstants.TX_CHECK_NORMAL_FREQUENCY);
+  useEffect(() => {
+    const { TransactionController } = Engine.context;
+    const currentHexChainId = addHexPrefix(toHexadecimal(props.chainId));
+
+    if (props.showIncomingTransactionsNetworks[currentHexChainId]) {
+      TransactionController.startIncomingTransactionPolling();
+    } else {
+      TransactionController.stopIncomingTransactionPolling();
     }
-  }, [backgroundMode, props.thirdPartyApiMode]);
+  }, [props.showIncomingTransactionsNetworks, props.chainId]);
 
   const connectionChangeHandler = useCallback(
     (state) => {
@@ -155,11 +162,12 @@ const Main = (props) => {
   const handleAppStateChange = useCallback(
     (appState) => {
       const newModeIsBackground = appState === 'background';
+      const { TransactionController } = Engine.context;
+
       // If it was in background and it's not anymore
       // we need to stop the Background timer
       if (backgroundMode.current && !newModeIsBackground) {
         BackgroundTimer.stop();
-        pollForIncomingTransactions();
       }
 
       backgroundMode.current = newModeIsBackground;
@@ -168,16 +176,13 @@ const Main = (props) => {
       // the background timer, which is less intense
       if (backgroundMode.current) {
         removeNotVisibleNotifications();
+
         BackgroundTimer.runBackgroundTimer(async () => {
-          await Engine.refreshTransactionHistory();
+          await TransactionController.updateIncomingTransactions();
         }, AppConstants.TX_CHECK_BACKGROUND_FREQUENCY);
       }
     },
-    [
-      backgroundMode,
-      removeNotVisibleNotifications,
-      pollForIncomingTransactions,
-    ],
+    [backgroundMode, removeNotVisibleNotifications],
   );
 
   const initForceReload = () => {
@@ -300,7 +305,6 @@ const Main = (props) => {
         showSimpleNotification: props.showSimpleNotification,
         removeNotificationById: props.removeNotificationById,
       });
-      pollForIncomingTransactions();
       checkInfuraAvailability();
       removeConnectionStatusListener.current = NetInfo.addEventListener(
         connectionChangeHandler,
@@ -315,20 +319,6 @@ const Main = (props) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const checkLineaMainnetAvailability = useCallback(async () => {
-    if (props.providerType === LINEA_MAINNET) {
-      try {
-        await jsonRpcRequest(LINEA_MAINNET_RPC_URL, 'eth_blockNumber', []);
-      } catch (e) {
-        setShowLineaMainnetAlert(true);
-      }
-    }
-  }, [props.providerType]);
-
-  useEffect(() => {
-    checkLineaMainnetAvailability();
-  }, [checkLineaMainnetAvailability]);
-
   const termsOfUse = useCallback(async () => {
     if (props.navigation) {
       await navigateTermsOfUse(props.navigation.navigate);
@@ -339,12 +329,18 @@ const Main = (props) => {
     termsOfUse();
   }, [termsOfUse]);
 
-  const renderLineaMainnetAlert = (network) => {
-    if (network === LINEA_MAINNET && showLineaMainnetAlert) {
+  const openDeprecatedNetworksArticle = () => {
+    Linking.openURL(GOERLI_DEPRECATED_ARTICLE);
+  };
+
+  const renderDeprecatedNetworkAlert = (chainId, backUpSeedphraseVisible) => {
+    if (chainId === NETWORKS_CHAIN_ID.GOERLI && showDeprecatedAlert) {
       return (
         <WarningAlert
-          text={strings('networks.linea_mainnet_not_released_alert')}
-          dismissAlert={() => setShowLineaMainnetAlert(false)}
+          text={strings('networks.deprecated_goerli')}
+          dismissAlert={() => setShowDeprecatedAlert(false)}
+          onPressLearnMore={openDeprecatedNetworksArticle}
+          precedentAlert={backUpSeedphraseVisible}
         />
       );
     }
@@ -358,6 +354,15 @@ const Main = (props) => {
         ) : (
           renderLoader()
         )}
+        {
+          ///: BEGIN:ONLY_INCLUDE_IF(snaps)
+        }
+        <View>
+          <SnapsExecutionWebView />
+        </View>
+        {
+          ///: END:ONLY_INCLUDE_IF
+        }
         <GlobalAlert />
         <FadeOutOverlay />
         <Notification navigation={props.navigation} />
@@ -367,8 +372,10 @@ const Main = (props) => {
           onDismiss={toggleRemindLater}
           navigation={props.navigation}
         />
-        {renderLineaMainnetAlert(props.providerType)}
-
+        {renderDeprecatedNetworkAlert(
+          props.chainId,
+          props.backUpSeedphraseVisible,
+        )}
         <SkipAccountSecurityModal
           modalVisible={showRemindLaterModal}
           onCancel={skipAccountModalSecureNow}
@@ -404,9 +411,9 @@ Main.propTypes = {
   hideCurrentNotification: PropTypes.func,
   removeNotificationById: PropTypes.func,
   /**
-   * Indicates whether third party API mode is enabled
+   * Indicates whether networks allows incoming transactions
    */
-  thirdPartyApiMode: PropTypes.bool,
+  showIncomingTransactionsNetworks: PropTypes.object,
   /**
    * Network provider type
    */
@@ -427,11 +434,22 @@ Main.propTypes = {
    * Object that represents the current route info like params passed to it
    */
   route: PropTypes.object,
+  /**
+   * Current chain id
+   */
+  chainId: PropTypes.string,
+  /**
+   * backup seed phrase modal visible
+   */
+  backUpSeedphraseVisible: PropTypes.bool,
 };
 
 const mapStateToProps = (state) => ({
-  thirdPartyApiMode: state.privacy.thirdPartyApiMode,
+  showIncomingTransactionsNetworks:
+    selectShowIncomingTransactionNetworks(state),
   providerType: selectProviderType(state),
+  chainId: selectChainId(state),
+  backUpSeedphraseVisible: state.user.backUpSeedphraseVisible,
 });
 
 const mapDispatchToProps = (dispatch) => ({

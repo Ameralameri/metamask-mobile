@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, LegacyRef } from 'react';
 import {
   TouchableOpacity,
   View,
@@ -53,7 +53,7 @@ import { BadgeVariant } from '../../../component-library/components/Badges/Badge
 import images from 'images/image-icons';
 import {
   AvatarSize,
-  AvatarVariants,
+  AvatarVariant,
 } from '../../../component-library/components/Avatars/Avatar';
 import AvatarToken from '../../../component-library/components/Avatars/Avatar/variants/AvatarToken';
 import Text, {
@@ -68,7 +68,7 @@ import { useNavigation } from '@react-navigation/native';
 import { EngineState } from '../../../selectors/types';
 import { StackNavigationProp } from '@react-navigation/stack';
 import createStyles from './styles';
-import SkeletonText from '../Ramp/components/SkeletonText';
+import SkeletonText from '../Ramp/common/components/SkeletonText';
 import Routes from '../../../constants/navigation/Routes';
 import { TOKEN_BALANCE_LOADING, TOKEN_RATE_UNDEFINED } from './constants';
 import AppConstants from '../../../core/AppConstants';
@@ -80,7 +80,7 @@ import {
 } from '../../../../wdio/screen-objects/testIDs/Components/Tokens.testIds';
 
 import { BrowserTab, TokenI, TokensI } from './types';
-import useOnRampNetwork from '../Ramp/hooks/useOnRampNetwork';
+import useRampNetwork from '../Ramp/common/hooks/useRampNetwork';
 import Badge from '../../../component-library/components/Badges/Badge/Badge';
 import useTokenBalancesController from '../../hooks/useTokenBalancesController/useTokenBalancesController';
 import {
@@ -90,15 +90,16 @@ import {
 import { selectDetectedTokens } from '../../../selectors/tokensController';
 import { selectContractExchangeRates } from '../../../selectors/tokenRatesController';
 import { selectUseTokenDetection } from '../../../selectors/preferencesController';
+import { regex } from '../../../../app/util/regex';
 
 const Tokens: React.FC<TokensI> = ({ tokens }) => {
-  const { colors, themeAppearance } = useTheme();
+  const { colors } = useTheme();
   const styles = createStyles(colors);
   const navigation = useNavigation<StackNavigationProp<any>>();
   const [tokenToRemove, setTokenToRemove] = useState<TokenI>();
   const [isAddTokenEnabled, setIsAddTokenEnabled] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [isNetworkBuySupported, isNativeTokenBuySupported] = useOnRampNetwork();
+  const [isNetworkRampSupported, isNativeTokenRampSupported] = useRampNetwork();
 
   const actionSheet = useRef<ActionSheet>();
 
@@ -208,9 +209,10 @@ const Tokens: React.FC<TokensI> = ({ tokens }) => {
         balanceValueFormatted,
       };
 
-    const balanceFiatCalculation =
+    const balanceFiatCalculation = Number(
       asset.balanceFiat ||
-      balanceToFiatNumber(balance, conversionRate, exchangeRate);
+        balanceToFiatNumber(balance, conversionRate, exchangeRate),
+    );
 
     const balanceFiat =
       balanceFiatCalculation >= 0.01 || balanceFiatCalculation === 0
@@ -257,7 +259,7 @@ const Tokens: React.FC<TokensI> = ({ tokens }) => {
 
       if (isLineaMainnet) return images['LINEA-MAINNET'];
 
-      return images[ticker];
+      return ticker ? images[ticker] : undefined;
     };
 
     return (
@@ -281,7 +283,7 @@ const Tokens: React.FC<TokensI> = ({ tokens }) => {
             <NetworkMainAssetLogo style={styles.ethLogo} />
           ) : (
             <AvatarToken
-              variant={AvatarVariants.Token}
+              variant={AvatarVariant.Token}
               name={asset.symbol}
               imageSource={{ uri: asset.image }}
               size={AvatarSize.Md}
@@ -289,7 +291,7 @@ const Tokens: React.FC<TokensI> = ({ tokens }) => {
           )}
         </BadgeWrapper>
 
-        <View style={styles.balances} testID={'balance'}>
+        <View style={styles.balances}>
           {/*
            * The name of the token must callback to the symbol
            * The reason for this is that the wallet_watchAsset doesn't return the name
@@ -312,7 +314,7 @@ const Tokens: React.FC<TokensI> = ({ tokens }) => {
   };
 
   const goToBuy = () => {
-    navigation.navigate(Routes.FIAT_ON_RAMP_AGGREGATOR.ID);
+    navigation.navigate(Routes.RAMP.BUY);
     InteractionManager.runAfterInteractions(() => {
       Analytics.trackEventWithParameters(MetaMetricsEvents.BUY_BUTTON_CLICKED, {
         text: 'Buy Native Token',
@@ -362,7 +364,7 @@ const Tokens: React.FC<TokensI> = ({ tokens }) => {
     if (
       !mainToken ||
       !isZero(mainToken.balance) ||
-      !(isNetworkBuySupported && isNativeTokenBuySupported)
+      !(isNetworkRampSupported && isNativeTokenRampSupported)
     ) {
       return null;
     }
@@ -399,7 +401,7 @@ const Tokens: React.FC<TokensI> = ({ tokens }) => {
         TokenDetectionController.detectTokens(),
         AccountTrackerController.refresh(),
         CurrencyRateController.start(),
-        TokenRatesController.poll(),
+        TokenRatesController.updateExchangeRates(),
       ];
       await Promise.all(actions);
       setRefreshing(false);
@@ -414,7 +416,7 @@ const Tokens: React.FC<TokensI> = ({ tokens }) => {
 
     const onOpenPortfolio = () => {
       const existingPortfolioTab = browserTabs.find((tab: BrowserTab) =>
-        tab.url.match(new RegExp(`${AppConstants.PORTFOLIO_URL}/(?![a-z])`)),
+        tab.url.match(regex.portfolioUrl),
       );
       let existingTabId;
       let newTabUrl;
@@ -530,13 +532,12 @@ const Tokens: React.FC<TokensI> = ({ tokens }) => {
     >
       {tokens?.length ? renderList() : renderEmpty()}
       <ActionSheet
-        ref={actionSheet}
+        ref={actionSheet as LegacyRef<ActionSheet>}
         title={strings('wallet.remove_token_title')}
         options={[strings('wallet.remove'), strings('wallet.cancel')]}
         cancelButtonIndex={1}
         destructiveButtonIndex={0}
         onPress={onActionSheetPress}
-        theme={themeAppearance}
       />
     </View>
   );

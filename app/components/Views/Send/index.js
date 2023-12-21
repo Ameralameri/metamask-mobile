@@ -47,7 +47,7 @@ import AnalyticsV2 from '../../../util/analyticsV2';
 import { KEYSTONE_TX_CANCELED } from '../../../constants/error';
 import { ThemeContext, mockTheme } from '../../../util/theme';
 import {
-  selectNetwork,
+  selectChainId,
   selectProviderType,
 } from '../../../selectors/networkController';
 import { selectTokenList } from '../../../selectors/tokenListController';
@@ -55,7 +55,6 @@ import { selectTokens } from '../../../selectors/tokensController';
 import { selectAccounts } from '../../../selectors/accountTrackerController';
 import { selectContractBalances } from '../../../selectors/tokenBalancesController';
 import {
-  selectFrequentRpcList,
   selectIdentities,
   selectSelectedAddress,
 } from '../../../selectors/preferencesController';
@@ -109,17 +108,17 @@ class Send extends PureComponent {
      */
     transaction: PropTypes.object.isRequired,
     /**
-		/* Triggers global alert
-		*/
+     * Triggers global alert
+     */
     showAlert: PropTypes.func,
     /**
      * Map representing the address book
      */
     addressBook: PropTypes.object,
     /**
-     * Network id
+     * The chain ID of the current selected network
      */
-    network: PropTypes.string,
+    chainId: PropTypes.string,
     /**
      * List of accounts from the PreferencesController
      */
@@ -133,12 +132,12 @@ class Send extends PureComponent {
      */
     contractBalances: PropTypes.object,
     /**
-		/* Hides or shows dApp transaction modal
-		*/
+     * Hides or shows dApp transaction modal
+     */
     toggleDappTransactionModal: PropTypes.func,
     /**
-		/* dApp transaction modal visible or not
-		*/
+     * dApp transaction modal visible or not
+     */
     dappTransactionModalVisible: PropTypes.bool,
     /**
      * List of tokens from TokenListController
@@ -281,7 +280,7 @@ class Send extends PureComponent {
    * Handle deeplink txMeta recipient
    */
   handleNewTxMetaRecipient = async (recipient) => {
-    const to = await getAddress(recipient, this.props.network);
+    const to = await getAddress(recipient, this.props.chainId);
 
     if (!to) {
       NotificationManager.showSimpleNotification({
@@ -305,7 +304,7 @@ class Send extends PureComponent {
     function_name = null, // eslint-disable-line no-unused-vars
     parameters = null,
   }) => {
-    const { addressBook, network, identities, selectedAddress } = this.props;
+    const { addressBook, chainId, identities, selectedAddress } = this.props;
 
     let newTxMeta = {};
     let txRecipient;
@@ -330,7 +329,7 @@ class Send extends PureComponent {
 
         newTxMeta.transactionToName = getTransactionToName({
           addressBook,
-          network,
+          chainId,
           toAddress: newTxMeta.to,
           identities,
           ensRecipient: newTxMeta.ensRecipient,
@@ -370,7 +369,7 @@ class Send extends PureComponent {
         };
         newTxMeta.transactionToName = getTransactionToName({
           addressBook,
-          network,
+          chainId,
           toAddress: to,
           identities,
           ensRecipient,
@@ -541,7 +540,7 @@ class Send extends PureComponent {
     this.setState({ transactionConfirmed: true });
     const {
       transaction: { selectedAsset, assetType },
-      network,
+      chainId,
       addressBook,
     } = this.props;
     let { transaction } = this.props;
@@ -552,11 +551,10 @@ class Send extends PureComponent {
         transaction = this.prepareAssetTransaction(transaction, selectedAsset);
       }
       const { result, transactionMeta } =
-        await TransactionController.addTransaction(
-          transaction,
-          TransactionTypes.MMM,
-          WalletDevice.MM_MOBILE,
-        );
+        await TransactionController.addTransaction(transaction, {
+          deviceConfirmedOn: WalletDevice.MM_MOBILE,
+          origin: TransactionTypes.MMM,
+        });
       await KeyringController.resetQRKeyringState();
       await ApprovalController.accept(transactionMeta.id, undefined, {
         waitForResult: true,
@@ -594,9 +592,9 @@ class Send extends PureComponent {
         }
       }
       const existingContact =
-        addressBook[network] && addressBook[network][checksummedAddress];
+        addressBook[chainId] && addressBook[chainId][checksummedAddress];
       if (!existingContact) {
-        AddressBookController.set(checksummedAddress, '', network);
+        AddressBookController.set(checksummedAddress, '', chainId);
       }
       await new Promise((resolve) => {
         resolve(result);
@@ -685,13 +683,14 @@ class Send extends PureComponent {
   /**
    * Returns corresponding tracking params to send
    *
-   * @return {object} - Object containing view, network, activeCurrency and assetType
+   * @return {object} - Object containing view, network type, activeCurrency and assetType
    */
   getTrackingParams = () => {
     const {
       networkType,
       transaction: { selectedAsset, assetType },
     } = this.props;
+
     return {
       view: SEND,
       network: networkType,
@@ -768,11 +767,10 @@ const mapStateToProps = (state) => ({
   addressBook: state.engine.backgroundState.AddressBookController.addressBook,
   accounts: selectAccounts(state),
   contractBalances: selectContractBalances(state),
-  frequentRpcList: selectFrequentRpcList(state),
   transaction: state.transaction,
   networkType: selectProviderType(state),
   tokens: selectTokens(state),
-  network: selectNetwork(state),
+  chainId: selectChainId(state),
   identities: selectIdentities(state),
   selectedAddress: selectSelectedAddress(state),
   dappTransactionModalVisible: state.modals.dappTransactionModalVisible,

@@ -3,16 +3,24 @@
 exports[`Link should render correctly 1`] = `
 <Fragment>
   <Text
+    accessibilityRole="link"
     onPress={[Function]}
+    onPressIn={[Function]}
+    onPressOut={[Function]}
     style={
       Object {
-        "color": "#0376C9",
+        "backgroundColor": "transparent",
       }
     }
     suppressHighlighting={true}
-    variant="sBodyMD"
   >
-    I'm a Link!
+    <Text
+      color="Primary"
+      style={false}
+      variant="sBodyMD"
+    >
+      I'm a Link!
+    </Text>
   </Text>
 </Fragment>
 `;

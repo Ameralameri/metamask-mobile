@@ -4,7 +4,7 @@ import Engine from '../Engine';
 import Logger from '../../util/Logger';
 // eslint-disable-next-line import/no-nodejs-modules
 import { EventEmitter } from 'events';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '../../store/async-storage-wrapper';
 import {
   CLIENT_OPTIONS,
   WALLET_CONNECT_ORIGIN,
@@ -24,6 +24,9 @@ import NotificationManager from '../NotificationManager';
 import { msBetweenDates, msToHours } from '../../util/date';
 import URL from 'url-parse';
 import parseWalletConnectUri from './wc-utils';
+import { store } from '../../store';
+import { selectChainId } from '../../selectors/networkController';
+import ppomUtil from '../../../app/lib/ppom/ppom-util';
 
 const hub = new EventEmitter();
 let connectors = [];
@@ -178,15 +181,34 @@ class WalletConnect {
                 hostname: payloadHostname,
               });
 
-              const hash = await (
-                await TransactionController.addTransaction(
-                  payload.params[0],
-                  this.url.current
+              const trx = await TransactionController.addTransaction(
+                payload.params[0],
+                {
+                  deviceConfirmedOn: WalletDevice.MM_MOBILE,
+                  origin: this.url.current
                     ? WALLET_CONNECT_ORIGIN + this.url.current
                     : undefined,
-                  WalletDevice.MM_MOBILE,
-                )
-              ).result;
+                },
+              );
+
+              const id = trx.transactionMeta.id;
+              const reqObject = {
+                id: payload.id,
+                jsonrpc: '2.0',
+                method: payload.method,
+                params: [
+                  {
+                    from: payload.params[0].from,
+                    to: payload.params[0].to,
+                    value: payload.params[0]?.value,
+                    data: payload.params[0]?.data,
+                  },
+                ],
+              };
+
+              ppomUtil.validateRequest(reqObject, id);
+
+              const hash = await trx.result;
               this.approveRequest({
                 id: payload.id,
                 result: hash,
@@ -283,8 +305,7 @@ class WalletConnect {
   };
 
   startSession = async (sessionData, existing) => {
-    const chainId =
-      Engine.context.NetworkController.state.providerConfig.chainId;
+    const chainId = selectChainId(store.getState());
     const selectedAddress =
       Engine.context.PreferencesController.state.selectedAddress?.toLowerCase();
     const approveData = {

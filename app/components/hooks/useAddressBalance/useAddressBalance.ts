@@ -15,7 +15,11 @@ import { selectContractBalances } from '../../../selectors/tokenBalancesControll
 import { selectSelectedAddress } from '../../../selectors/preferencesController';
 import { Asset } from './useAddressBalance.types';
 
-const useAddressBalance = (asset: Asset, address?: string) => {
+const useAddressBalance = (
+  asset: Asset,
+  address?: string,
+  dontWatchAsset?: boolean,
+) => {
   const [addressBalance, setAddressBalance] = useState('0');
 
   const { accounts, contractBalances, selectedAddress } = useSelector(
@@ -41,14 +45,12 @@ const useAddressBalance = (asset: Asset, address?: string) => {
       if (!contractAddress || !decimals) {
         return;
       }
-      if (!contractBalances[contractAddress]) {
-        TokensController.addToken(
-          contractAddress,
-          symbol,
-          decimals,
+
+      if (!contractBalances[contractAddress] && !dontWatchAsset) {
+        TokensController.addToken(contractAddress, symbol, decimals, {
           image,
           name,
-        );
+        });
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

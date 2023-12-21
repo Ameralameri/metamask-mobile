@@ -57,6 +57,8 @@ import {
   isMainnetByChainId,
   isMultiLayerFeeNetwork,
   fetchEstimatedMultiLayerL1Fee,
+  TESTNET_FAUCETS,
+  isTestNetworkWithFaucet,
 } from '../../../../util/networks';
 import Text from '../../../Base/Text';
 import AnalyticsV2 from '../../../../util/analyticsV2';
@@ -70,6 +72,7 @@ import AppConstants from '../../../../core/AppConstants';
 import {
   getAddressAccountType,
   isQRHardwareAccount,
+  isHardwareAccount,
 } from '../../../../util/address';
 import { KEYSTONE_TX_CANCELED } from '../../../../constants/error';
 import { ThemeContext, mockTheme } from '../../../../util/theme';
@@ -85,7 +88,6 @@ import {
 } from '../../../../core/GasPolling/GasPolling';
 import {
   selectChainId,
-  selectNetwork,
   selectProviderType,
   selectTicker,
 } from '../../../../selectors/networkController';
@@ -98,13 +100,13 @@ import { selectAccounts } from '../../../../selectors/accountTrackerController';
 import { selectContractBalances } from '../../../../selectors/tokenBalancesController';
 import generateTestId from '../../../../../wdio/utils/generateTestId';
 import { COMFIRM_TXN_AMOUNT } from '../../../../../wdio/screen-objects/testIDs/Screens/TransactionConfirm.testIds';
-import { isNetworkBuyNativeTokenSupported } from '../../../UI/Ramp/utils';
+import { isNetworkRampNativeTokenSupported } from '../../../UI/Ramp/common/utils';
 import { getRampNetworks } from '../../../../reducers/fiatOrders';
 import CustomGasModal from '../../../UI/CustomGasModal';
-import {
-  TXN_CONFIRM_SCREEN,
-  TXN_CONFIRM_SEND_BUTTON,
-} from '../../../../constants/test-ids';
+import { ConfirmViewSelectorsIDs } from '../../../../../e2e/selectors/SendFlow/ConfirmView.selectors';
+import ExtendedKeyringTypes from '../../../..//constants/keyringTypes';
+import { getLedgerKeyring } from '../../../../core/Ledger/Ledger';
+import { createLedgerTransactionModalNavDetails } from '../../../UI/LedgerModals/LedgerTransactionModal';
 
 const EDIT = 'edit';
 const EDIT_NONCE = 'edit_nonce';
@@ -166,10 +168,6 @@ class Confirm extends PureComponent {
      * Chain Id
      */
     chainId: PropTypes.string,
-    /**
-     * Network id
-     */
-    network: PropTypes.string,
     /**
      * Indicates whether hex data should be shown in transaction editor
      */
@@ -325,7 +323,9 @@ class Confirm extends PureComponent {
       return;
     }
     try {
-      const eth = new Eth(Engine.context.NetworkController.provider);
+      const eth = new Eth(
+        Engine.context.NetworkController.getProviderAndBlockTracker().provider,
+      );
       const result = await fetchEstimatedMultiLayerL1Fee(eth, {
         txParams: transaction.transaction,
         chainId,
@@ -524,7 +524,10 @@ class Confirm extends PureComponent {
       const { TokensController } = Engine.context;
 
       if (!contractBalances[address]) {
-        await TokensController.addToken(address, symbol, decimals, image, name);
+        await TokensController.addToken(address, symbol, decimals, {
+          image,
+          name,
+        });
       }
 
       const [, , rawAmount] = decodeTransferData('transfer', data);
@@ -662,6 +665,49 @@ class Confirm extends PureComponent {
     });
   };
 
+  onLedgerConfirmation = async (
+    approve,
+    result,
+    transactionMeta,
+    assetType,
+    gaParams,
+  ) => {
+    const { TransactionController } = Engine.context;
+    const { navigation } = this.props;
+    // Manual cancel from UI or rejected from ledger device.
+    try {
+      if (!approve) {
+        TransactionController.hub.removeAllListeners(
+          `${transactionMeta.id}:finished`,
+        );
+        TransactionController.cancelTransaction(transactionMeta.id);
+      } else {
+        await new Promise((resolve) => resolve(result));
+
+        if (transactionMeta.error) {
+          throw transactionMeta.error;
+        }
+
+        InteractionManager.runAfterInteractions(() => {
+          NotificationManager.watchSubmittedTransaction({
+            ...transactionMeta,
+            assetType,
+          });
+          this.checkRemoveCollectible();
+          AnalyticsV2.trackEvent(
+            MetaMetricsEvents.SEND_TRANSACTION_COMPLETED,
+            gaParams,
+          );
+          stopGasPolling();
+          resetTransaction();
+        });
+      }
+    } finally {
+      // Error handling derived to LedgerConfirmationModal component
+      navigation && navigation.dangerouslyGetParent()?.popToTop();
+    }
+  };
+
   onNext = async () => {
     const { TransactionController, KeyringController, ApprovalController } =
       Engine.context;
@@ -700,11 +746,37 @@ class Confirm extends PureComponent {
       }
 
       const { result, transactionMeta } =
-        await TransactionController.addTransaction(
-          transaction,
-          TransactionTypes.MMM,
-          WalletDevice.MM_MOBILE,
+        await TransactionController.addTransaction(transaction, {
+          deviceConfirmedOn: WalletDevice.MM_MOBILE,
+          origin: TransactionTypes.MMM,
+        });
+
+      const isLedgerAccount = isHardwareAccount(transaction.from, [
+        ExtendedKeyringTypes.ledger,
+      ]);
+
+      if (isLedgerAccount) {
+        const ledgerKeyring = await getLedgerKeyring();
+        this.setState({ transactionConfirmed: false });
+        // Approve transaction for ledger is called in the Confirmation Flow (modals) after user prompt
+        this.props.navigation.navigate(
+          ...createLedgerTransactionModalNavDetails({
+            transactionId: transactionMeta.id,
+            deviceId: ledgerKeyring.deviceId,
+            onConfirmationComplete: async (approve) =>
+              await this.onLedgerConfirmation(
+                approve,
+                result,
+                transactionMeta,
+                assetType,
+                this.getAnalyticsParams(),
+              ),
+            type: 'signTransaction',
+          }),
         );
+        return;
+      }
+
       await KeyringController.resetQRKeyringState();
       await ApprovalController.accept(transactionMeta.id, undefined, {
         waitForResult: true,
@@ -864,7 +936,7 @@ class Confirm extends PureComponent {
   buyEth = () => {
     const { navigation } = this.props;
     try {
-      navigation.navigate('FiatOnRampAggregator');
+      navigation.navigate(Routes.RAMP.BUY);
     } catch (error) {
       Logger.error(error, 'Navigation: Error when navigating to buy ETH.');
     }
@@ -874,9 +946,10 @@ class Confirm extends PureComponent {
   };
 
   goToFaucet = () => {
+    const { chainId } = this.props;
     InteractionManager.runAfterInteractions(() => {
       this.props.navigation.navigate(Routes.BROWSER.VIEW, {
-        newTabUrl: AppConstants.URLS.MM_FAUCET,
+        newTabUrl: TESTNET_FAUCETS[chainId],
         timestamp: Date.now(),
       });
     });
@@ -933,7 +1006,6 @@ class Confirm extends PureComponent {
       showHexData,
       showCustomNonce,
       primaryCurrency,
-      network,
       chainId,
       gasEstimateType,
       isNativeTokenBuySupported,
@@ -963,8 +1035,11 @@ class Confirm extends PureComponent {
       gasEstimateType === GAS_ESTIMATE_TYPES.FEE_MARKET ||
       gasEstimateType === GAS_ESTIMATE_TYPES.NONE;
     const isQRHardwareWalletDevice = isQRHardwareAccount(fromSelectedAddress);
+    const isLedgerAccount = isHardwareAccount(fromSelectedAddress, [
+      ExtendedKeyringTypes.ledger,
+    ]);
 
-    const isTestNetwork = isTestNet(network);
+    const isTestNetwork = isTestNet(chainId);
 
     const errorPress = isTestNetwork ? this.goToFaucet : this.buyEth;
     const errorLinkText = isTestNetwork
@@ -975,7 +1050,7 @@ class Confirm extends PureComponent {
       <SafeAreaView
         edges={['bottom']}
         style={styles.wrapper}
-        testID={TXN_CONFIRM_SCREEN}
+        testID={ConfirmViewSelectorsIDs.CONTAINER}
       >
         <AccountFromToInfoCard
           transactionState={this.props.transactionState}
@@ -1034,7 +1109,8 @@ class Confirm extends PureComponent {
             isAnimating={isAnimating}
             gasEstimationReady={gasEstimationReady}
             chainId={chainId}
-            gasObject={!showFeeMarket ? legacyGasObject : EIP1559GasObject}
+            gasObject={EIP1559GasObject}
+            gasObjectLegacy={legacyGasObject}
             updateTransactionState={this.updateTransactionState}
             legacy={!showFeeMarket}
             onlyGas={false}
@@ -1065,7 +1141,7 @@ class Confirm extends PureComponent {
 
           {errorMessage && (
             <View style={styles.errorWrapper}>
-              {isTestNetwork || isNativeTokenBuySupported ? (
+              {isTestNetworkWithFaucet(chainId) || isNativeTokenBuySupported ? (
                 <TouchableOpacity onPress={errorPress}>
                   <Text style={styles.error}>{errorMessage}</Text>
                   <Text style={[styles.error, styles.underline]}>
@@ -1114,12 +1190,14 @@ class Confirm extends PureComponent {
             }
             containerStyle={styles.buttonNext}
             onPress={this.onNext}
-            testID={TXN_CONFIRM_SEND_BUTTON}
+            testID={ConfirmViewSelectorsIDs.SEND_BUTTON}
           >
             {transactionConfirmed ? (
               <ActivityIndicator size="small" color={colors.primary.inverse} />
             ) : isQRHardwareWalletDevice ? (
               strings('transaction.confirm_with_qr_hardware')
+            ) : isLedgerAccount ? (
+              strings('transaction.confirm_with_ledger_hardware')
             ) : (
               strings('transaction.send')
             )}
@@ -1140,7 +1218,6 @@ const mapStateToProps = (state) => ({
   contractBalances: selectContractBalances(state),
   conversionRate: selectConversionRate(state),
   currentCurrency: selectCurrentCurrency(state),
-  network: selectNetwork(state),
   providerType: selectProviderType(state),
   showHexData: state.settings.showHexData,
   showCustomNonce: state.settings.showCustomNonce,
@@ -1155,7 +1232,7 @@ const mapStateToProps = (state) => ({
   gasEstimateType:
     state.engine.backgroundState.GasFeeController.gasEstimateType,
   isPaymentRequest: state.transaction.paymentRequest,
-  isNativeTokenBuySupported: isNetworkBuyNativeTokenSupported(
+  isNativeTokenBuySupported: isNetworkRampNativeTokenSupported(
     selectChainId(state),
     getRampNetworks(state),
   ),
